@@ -1,0 +1,11 @@
+{
+  "name": "Inkwell: PSAT Practice",
+  "short_name": "Inkwell",
+  "description": "Bite-size PSAT practice with streaks, quests, and spaced review.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F3F5FA",
+  "theme_color": "#3049D8",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
