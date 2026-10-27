@@ -93,6 +93,17 @@
     return el;
   }
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const calm = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function countUp(el, to, ms = 900, prefix = '', suffix = '') {
+    if (calm() || !to) { el.textContent = prefix + to + suffix; return; }
+    const t0 = performance.now();
+    (function step(t) {
+      const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = prefix + Math.round(to * e) + suffix;
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  function restart(el, cls) { if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
 
   /* ----------------------------------------------------------------- icons */
   const I = {
@@ -156,7 +167,7 @@
       <path class="body" d="M60 30c26 0 40 16 40 40 0 22-16 38-40 38S20 92 20 70c0-24 14-40 40-40Z"/>
       <path d="M33 23l3 13 9-6Z M87 23l-3 13-9-6Z" fill="#FF8FA0" opacity=".7"/>
       <ellipse cx="60" cy="96" rx="22" ry="8" fill="#fff" opacity=".08"/>
-      ${eyes}
+      <g class="eyes">${eyes}</g>
       <path d="M57 68h6l-3 3Z" fill="#FF8FA0"/>
       ${mouth}
       <circle cx="36" cy="72" r="5" fill="#FF8FA0" opacity=".45"/><circle cx="84" cy="72" r="5" fill="#FF8FA0" opacity=".45"/>
@@ -364,7 +375,7 @@
   function toast(msg, icon = I.check) {
     let box = $('.toasts'); if (!box) { box = h('div', { class: 'toasts', 'aria-live': 'polite' }); document.body.append(box); }
     const t = h('div', { class: 'toast', html: `${icon}<span>${esc(msg)}</span>` });
-    box.append(t); while (box.children.length > 2) box.firstChild.remove(); setTimeout(() => t.remove(), 3400);
+    box.append(t); while (box.children.length > 2) box.firstChild.remove(); setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 260); }, 3200);
   }
 
   /* ------------------------------------------------------------ reminders */
@@ -529,7 +540,7 @@
     const inp = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', 'aria-label': 'Your answer', placeholder: 'Your answer', id: 'answer-input' });
     inp.addEventListener('input', () => ctx.ready(inp.value.trim().length > 0));
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && inp.value.trim()) { e.preventDefault(); e.stopPropagation(); ctx.submit(); } });
-    setTimeout(() => inp.focus(), 60);
+    setTimeout(() => inp.focus(), 220);
     return {
       el: h('div', { class: 'answerin' }, inp),
       check: () => {
@@ -694,7 +705,9 @@
     const W = { mc: wMC, tf: wTF, cloze: wCloze, punct: wPunct, input: wInput, tap: wTap, match: wMatch, sort: wSort, order: wOrder }[q.t];
     L.w = W(q, ctx, passageEl);
     wrap.append(L.w.el);
-    body.replaceChildren(wrap); body.scrollTop = 0;
+    const old = body.querySelector('.qwrap');
+    if (old && !calm()) { old.classList.add('qout'); setTimeout(() => { if (L && L.q === q) { body.replaceChildren(wrap); body.scrollTop = 0; } }, 150); }
+    else { body.replaceChildren(wrap); body.scrollTop = 0; }
     foot.className = 'lesson-foot';
     foot.innerHTML = L.w.auto
       ? `<div class="inner"><button class="btn ghost" data-act="skipmatch">Can’t do this now</button></div>`
@@ -724,11 +737,13 @@
       L.xp += (first ? 2 : 1) + (L.combo >= 3 ? 1 : 0);
       L.done++; if (L.mode === 'speed') L.speedScore++;
       sfx.ok();
+      restart($('#lesson .bar'), 'shine');
+      xpFloat(`+${(first ? 2 : 1) + (L.combo >= 3 ? 1 : 0)} XP`);
       if ([3, 5, 10, 15].includes(L.combo)) comboFlash(L.combo);
     } else {
       L.combo = 0; sfx.no();
       if (L.mode !== 'speed') {
-        loseHeart();
+        loseHeart(); L.lostHeart = S.settings.hearts;
         if (!L.retried.has(q.id)) { L.retried.add(q.id); L.queue.push(q); } else L.done++;
       }
     }
@@ -736,6 +751,11 @@
     S.bestComboEver = Math.max(S.bestComboEver, L.combo);
     save();
     updateLessonTop();
+    if (L.lostHeart) {
+      L.lostHeart = false;
+      const hb = $('#lstat .hearts'); restart(hb, 'lose');
+      if (hb && !calm()) { const m = h('span', { class: 'minus' }, '\u22121'); hb.append(m); setTimeout(() => m.remove(), 1000); }
+    }
     const foot = $('#lfoot');
     foot.className = 'lesson-foot ' + (ok ? 'ok' : 'no');
     const willRetry = !ok && L.mode !== 'speed' && L.queue.lastIndexOf(q) > L.idx;
@@ -753,10 +773,17 @@
     setTimeout(() => { const c = $('#contbtn'); if (c) c.focus({ preventScroll: true }); }, 30);
   }
 
+  function xpFloat(text) {
+    if (calm()) return;
+    const b = $('#checkbtn') || $('#lfoot .inner'); if (!b) return;
+    const r = b.getBoundingClientRect();
+    const el = h('div', { class: 'xpfloat', style: `left:${r.left + r.width / 2 - 30}px;top:${r.top - 34}px` }, text);
+    document.body.append(el); setTimeout(() => el.remove(), 1000);
+  }
   function comboFlash(n) {
     const top = $('#lesson .lesson-top'); if (!top) return;
-    const el = h('div', { class: 'combo' }, `${n} in a row!`); top.style.position = 'relative'; top.append(el);
-    setTimeout(() => el.remove(), 1200);
+    const el = h('div', { class: 'combo', html: `${I.flame}<span>${n} in a row!</span>` }); top.style.position = 'relative'; top.append(el);
+    setTimeout(() => el.remove(), 1300);
   }
 
   function onContinue() {
@@ -795,9 +822,10 @@
     else if (answered && acc < 60) { sub = 'The ones you missed come back in about 10 minutes, so you can try them again soon.'; }
     body.innerHTML = `<div class="done">${mascot(mood)}
       <h1>${esc(title)}</h1>${sub ? `<p class="muted" style="margin:0">${esc(sub)}</p>` : ''}
-      <div class="kv"><div><b>+${xp}</b><span>XP</span></div><div><b>${L.mode === 'speed' ? L.speedScore : acc + '%'}</b><span>${L.mode === 'speed' ? 'Correct' : 'Accuracy'}</span></div><div><b>${Math.floor(secs / 60)}:${pad(secs % 60)}</b><span>Time</span></div></div>
-      <div class="kv"><div><b>${L.maxCombo}</b><span>Best combo</span></div><div><b>+${gems}</b><span>Gems</span></div><div><b>${S.daily.xp}/${S.settings.goal}</b><span>Daily goal</span></div></div>
+      <div class="kv"><div><b data-count="${xp}" data-prefix="+">+${xp}</b><span>XP</span></div><div><b>${L.mode === 'speed' ? L.speedScore : acc + '%'}</b><span>${L.mode === 'speed' ? 'Correct' : 'Accuracy'}</span></div><div><b>${Math.floor(secs / 60)}:${pad(secs % 60)}</b><span>Time</span></div></div>
+      <div class="kv"><div><b data-count="${L.maxCombo}">${L.maxCombo}</b><span>Best combo</span></div><div><b data-count="${gems}" data-prefix="+">+${gems}</b><span>Gems</span></div><div><b>${S.daily.xp}/${S.settings.goal}</b><span>Daily goal</span></div></div>
     </div>`;
+    body.querySelectorAll('[data-count]').forEach((el, i) => { const n = +el.dataset.count, p = el.dataset.prefix || ''; el.textContent = p + '0'; setTimeout(() => countUp(el, n, 800, p), 350 + i * 120); });
     foot.className = 'lesson-foot';
     foot.innerHTML = `<div class="inner"><button class="btn" data-act="${extended ? 'streakscreen' : 'endlesson'}" id="contbtn">Continue</button></div>`;
     if (!outOfHearts) { sfx.win(); if (perfect || L.mode === 'speed' && L.speedScore >= 8) confetti(); }
@@ -806,12 +834,13 @@
 
   function streakScreen() {
     const body = $('#lbody'), foot = $('#lfoot');
-    body.innerHTML = `<div class="done"><div class="bigflame">${I.flame}</div><div class="bigcount num">${S.streak}</div>
+    body.innerHTML = `<div class="done"><div class="bigflame">${I.flame}</div><div class="bigcount num">${Math.max(0, S.streak - 1)}</div>
       <h1>${S.streak === 1 ? 'Streak started!' : `${S.streak}-day streak!`}</h1>
       <p class="muted" style="margin:0">You hit today’s goal. Come back tomorrow to keep it going.</p>
       <div class="card" style="width:100%">${weekStrip()}</div></div>`;
     foot.innerHTML = `<div class="inner"><button class="btn hl" data-act="endlesson" id="contbtn">Keep going</button></div>`;
-    sfx.streak(); confetti();
+    sfx.streak();
+    setTimeout(() => { const c = $('.bigcount'); if (c) { c.textContent = S.streak; restart(c, 'pop'); } confetti(); }, calm() ? 0 : 650);
   }
 
   function endLesson() {
@@ -901,7 +930,7 @@
     const pct = Math.min(1, S.daily.xp / S.settings.goal), r = 30, C = 2 * Math.PI * r;
     return `<svg viewBox="0 0 76 76" width="${size}" height="${size}" role="img" aria-label="${S.daily.xp} of ${S.settings.goal} XP today">
       <circle cx="38" cy="38" r="${r}" fill="none" style="stroke:var(--surface-2)" stroke-width="9"/>
-      <circle cx="38" cy="38" r="${r}" fill="none" style="stroke:${pct >= 1 ? 'var(--good)' : 'var(--hl)'}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct)}" transform="rotate(-90 38 38)"/>
+      <circle cx="38" cy="38" r="${r}" fill="none" style="stroke:${pct >= 1 ? 'var(--good)' : 'var(--hl)'}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct)}" transform="rotate(-90 38 38)" class="ringfill" style="--c:${C}"/>
       <text x="38" y="43" text-anchor="middle" font-size="15" font-weight="700" style="fill:var(--ink);font-family:var(--f-mono)">${Math.round(pct * 100)}%</text></svg>`;
   }
   function weekStrip() {
@@ -941,17 +970,17 @@
   }
   function welcomeCard() {
     if (S.welcomed) return '';
-    return `<div class="card hello">${mascot('wow')}<div><div class="eyebrow">Welcome to Inkwell</div><h2>Hi, I’m Dot. Let’s get you PSAT-ready.</h2>
+    return `<div class="card hello">${mascot('wow', S.hat, 'mascot idle')}<div><div class="eyebrow">Welcome to Inkwell</div><h2>Hi, I’m Dot. Let’s get you PSAT-ready.</h2>
       <p class="muted" style="margin:4px 0 0">Short lessons, every question type on the test, and questions you’ve answered rest for a while before they come back. Pick a daily goal:</p>
       <div class="goalpick">${[[10, 'Casual'], [20, 'Regular'], [30, 'Serious'], [50, 'Intense']].map(([g, n]) => `<button data-act="goal" data-goal="${g}" aria-pressed="${S.settings.goal === g}">${n} · ${g} XP</button>`).join('')}</div>
       <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="start" data-skill="voc">Start the first lesson</button><button class="linkbtn" data-act="welcomed">Just look around</button></div></div></div>`;
   }
 
-  function nodeHTML(sk, uc) {
+  function nodeHTML(sk, uc, i = 0, isNext = false) {
     const st = skillStats(sk.id), r = 38, C = 2 * Math.PI * r;
     const badge = st.ready > 0 ? `<span class="badge" title="${st.ready} ready">${st.ready}</span>` : `<span class="badge clock" title="Next unlock in ${fmtDur(st.next - Date.now())}">${I.clock}</span>`;
-    return `<div class="node-row"><button class="node ${st.ready ? '' : 'rest'}" data-act="skill" data-skill="${sk.id}" style="--uc:var(--${uc})" aria-label="${esc(sk.name)}: ${st.ready} ready, ${Math.round(st.pct * 100)}% mastered">
-      <span class="disc"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--surface-2)" stroke-width="5"/><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--hl)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - st.pct)}" transform="rotate(-90 42 42)"/></svg>
+    return `<div class="node-row" style="--i:${i}"><button class="node ${st.ready ? '' : 'rest'} ${isNext ? 'next' : ''}" data-act="skill" data-skill="${sk.id}" style="--uc:var(--${uc})" aria-label="${esc(sk.name)}: ${st.ready} ready, ${Math.round(st.pct * 100)}% mastered">
+      <span class="disc"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--surface-2)" stroke-width="5"/><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--hl)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - st.pct)}" transform="rotate(-90 42 42)" class="ringfill" style="--c:${C}"/></svg>${isNext ? `<span class="starttip">${S.tried.includes(sk.id) ? 'Next' : 'Start'}</span>` : ''}
       <span class="face">${esc(sk.icon)}</span>${badge}</span>
       <span class="label">${esc(sk.name)}</span></button></div>`;
   }
@@ -961,11 +990,13 @@
     let html = welcomeCard() + noticeCard() + reminderBanner();
     html += `<div class="aside-hide-wide">${todayCard()}</div>`;
     if (due > 0) html += `<div class="banner" style="background:var(--surface);border-color:var(--line)">${I.redo.replace('<svg', '<svg style="color:var(--brand)"')}<span><b>${due} question${due === 1 ? ' is' : 's are'} ready for review.</b> Reviewing at the right time is how answers stick.</span><button class="btn small" data-act="mode" data-mode="review">Review</button></div>`;
+    const nextSk = SK.find((s) => skillStats(s.id).ready > 0);
+    let ni = 0;
     UN.forEach((u, ui) => {
       const skills = SK.filter((s) => s.unit === u.id);
       html += `<section class="unit" style="--uc:var(--${u.color})" aria-label="${esc(u.name)}">
         <div class="unit-head"><div><div class="eyebrow">Unit ${ui + 1} · ${ui < 5 ? 'Reading & Writing' : 'Math'}</div><h2>${esc(u.name)}</h2><p>${esc(u.blurb)}</p></div><div class="unit-num">${ui + 1}</div></div>
-        <div class="path">${skills.map((s) => nodeHTML(s, u.color)).join('')}</div></section>`;
+        <div class="path">${skills.map((s) => nodeHTML(s, u.color, ni++, nextSk && s.id === nextSk.id)).join('')}</div></section>`;
     });
     return html;
   }
@@ -1002,7 +1033,7 @@
       heat += `<i class="${cls}" title="${k}${st ? ' · ' + (st === 'goal' ? 'goal met' : 'freeze used') : ''}"></i>`;
     }
     const rows = SK.map((s) => { const st = skillStats(s.id); return `<tr><td>${esc(s.name)}</td><td class="num">${st.seen}/${st.total}</td><td><span class="minibar"><i style="width:${Math.round(st.pct * 100)}%"></i></span></td><td class="num">${st.acc == null ? '–' : Math.round(st.acc * 100) + '%'}</td><td class="num">${st.ready}</td></tr>`; }).join('');
-    return `<div class="card hello">${mascot('happy')}<div><div class="eyebrow">Level ${lv.lvl}</div><h2>${S.xp.toLocaleString()} XP total</h2>
+    return `<div class="card hello">${mascot('calm', S.hat, 'mascot idle')}<div><div class="eyebrow">Level ${lv.lvl}</div><h2>${S.xp.toLocaleString()} XP total</h2>
         <div class="bar brand" style="margin-top:8px" aria-label="Level progress"><i style="width:${(lv.into / lv.need) * 100}%"></i></div><p class="muted num" style="margin:4px 0 0;font-size:13px">${lv.need - lv.into} XP to level ${lv.lvl + 1}</p></div></div>
       <div class="statgrid">
         <div class="stile"><b>${S.streak}</b><span>Day streak</span></div><div class="stile"><b>${S.best}</b><span>Best streak</span></div>
@@ -1065,14 +1096,23 @@
       <p class="muted" style="font-size:13px">Inkwell is an independent study tool with original practice questions. It isn’t affiliated with the College Board.</p>`;
   }
 
+  let lastView = null, lastStats = null, asideDone = false;
   function renderView() {
     if (!$('#app .shell')) shell();
     const v = curView();
     document.querySelectorAll('[data-act="go"].tab').forEach((t) => t.setAttribute('aria-current', t.dataset.view === v ? 'page' : 'false'));
     $('#stats').innerHTML = statsHTML();
+    const now = { flame: S.streak, gem: S.gems, heart: S.settings.hearts ? S.hearts : -1 };
+    if (lastStats) for (const k of Object.keys(now)) if (now[k] !== lastStats[k]) restart($(`#stats .stat.${k}`), 'bump');
+    lastStats = now;
     const render = { learn: viewLearn, practice: viewPractice, quests: viewQuests, profile: viewProfile, shop: viewShop, prefs: viewPrefs }[v];
-    $('#view').innerHTML = render();
-    $('#aside').innerHTML = asideHTML();
+    const viewEl = $('#view');
+    viewEl.innerHTML = render();
+    if (v !== lastView) { restart(viewEl, 'enter'); window.scrollTo(0, 0); } else viewEl.classList.remove('enter');
+    lastView = v;
+    const asideEl = $('#aside');
+    asideEl.innerHTML = asideHTML();
+    if (!asideDone) { asideEl.classList.add('enter'); asideDone = true; } else asideEl.classList.remove('enter');
     document.querySelectorAll('.rail .brand, .topbar .brand').forEach((b) => { b.innerHTML = `${mascot('happy', S.hat, 'mascot')}<span>Inkwell</span>`; });
     const ti = $('#remind-at'); if (ti) ti.addEventListener('change', () => { S.settings.remindAt = ti.value || '19:00'; S.settings.lastNotified = null; save(); toast(`Reminder set for ${ti.value}.`, I.bell); });
   }
