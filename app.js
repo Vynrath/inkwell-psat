@@ -149,29 +149,30 @@
     }
   }
   function mascot(mood = 'happy', hat = S.hat, cls = 'mascot') {
+    const K = '#101633';
     const eyes = {
-      happy: '<path d="M41 60q6-8 12 0M67 60q6-8 12 0" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>',
-      calm: '<circle cx="47" cy="60" r="7" fill="#fff"/><circle cx="73" cy="60" r="7" fill="#fff"/><circle cx="48.5" cy="61" r="3.5" fill="#101633"/><circle cx="74.5" cy="61" r="3.5" fill="#101633"/>',
-      sad: '<circle cx="47" cy="62" r="6.5" fill="#fff"/><circle cx="73" cy="62" r="6.5" fill="#fff"/><circle cx="47" cy="64" r="3.3" fill="#101633"/><circle cx="73" cy="64" r="3.3" fill="#101633"/><path d="M39 52l12 4M81 52l-12 4" stroke="#fff" stroke-width="3" stroke-linecap="round"/>',
-      wow: '<circle cx="47" cy="59" r="9" fill="#fff"/><circle cx="73" cy="59" r="9" fill="#fff"/><circle cx="47" cy="59" r="4.5" fill="#101633"/><circle cx="73" cy="59" r="4.5" fill="#101633"/><circle cx="49" cy="57" r="1.6" fill="#fff"/><circle cx="75" cy="57" r="1.6" fill="#fff"/>',
+      happy: `<path d="M41 59q6-7 12 0M67 59q6-7 12 0" fill="none" stroke="${K}" stroke-width="4" stroke-linecap="round"/>`,
+      calm: `<circle cx="47" cy="59" r="5.5" fill="${K}"/><circle cx="73" cy="59" r="5.5" fill="${K}"/><circle cx="49" cy="57" r="1.8" fill="#fff"/><circle cx="75" cy="57" r="1.8" fill="#fff"/>`,
+      sad: `<circle cx="47" cy="61" r="5" fill="${K}"/><circle cx="73" cy="61" r="5" fill="${K}"/><circle cx="48.5" cy="59.5" r="1.5" fill="#fff"/><circle cx="74.5" cy="59.5" r="1.5" fill="#fff"/><path d="M39 51l11 4M81 51l-11 4" stroke="${K}" stroke-width="3" stroke-linecap="round"/>`,
+      wow: `<circle cx="47" cy="58" r="7.5" fill="${K}"/><circle cx="73" cy="58" r="7.5" fill="${K}"/><circle cx="49.5" cy="55.5" r="2.4" fill="#fff"/><circle cx="75.5" cy="55.5" r="2.4" fill="#fff"/>`,
     }[mood] || '';
-    const mouth = {
-      happy: '<path d="M52 74q8 8 16 0" fill="#FF8FA0" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>',
-      calm: '<path d="M55 74q5 4 10 0" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>',
-      sad: '<path d="M54 78q6-5 12 0" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>',
-      wow: '<ellipse cx="60" cy="76" rx="5" ry="6" fill="#FF8FA0" stroke="#fff" stroke-width="2"/>',
+    const beak = {
+      happy: '<path d="M51 67q9-5 18 0q-9 9-18 0Z" fill="#FF9F43"/><path d="M53 68.5q7 3 14 0" fill="none" stroke="#D9731F" stroke-width="1.6" stroke-linecap="round"/>',
+      calm: '<path d="M52 67q8-4 16 0l-8 7Z" fill="#FF9F43"/>',
+      sad: '<path d="M53 69q7-3 14 0l-7 6Z" fill="#F08A35"/>',
+      wow: '<path d="M52 66q8-5 16 0l-8 4Z" fill="#FF9F43"/><path d="M53 72l7 6 7-6q-7-3-14 0Z" fill="#E8822C"/><path d="M54 71h12" stroke="#B85A1C" stroke-width="1.6"/>',
     }[mood] || '';
     const hatTop = ['party', 'grad', 'crown'].includes(hat);
-    return `<svg class="${cls}" viewBox="0 ${hatTop ? -4 : 6} 120 ${hatTop ? 124 : 114}" role="img" aria-label="Dot the ink cat">
-      <path class="body" d="M96 98c14-2 18-14 10-22" fill="none" stroke-width="7" stroke-linecap="round" style="fill:none;stroke:var(--mascot)"/>
-      <path class="body" d="M28 46 32 18l20 18M92 46 88 18 68 36"/>
-      <path class="body" d="M60 30c26 0 40 16 40 40 0 22-16 38-40 38S20 92 20 70c0-24 14-40 40-40Z"/>
-      <path d="M33 23l3 13 9-6Z M87 23l-3 13-9-6Z" fill="#FF8FA0" opacity=".7"/>
-      <ellipse cx="60" cy="96" rx="22" ry="8" fill="#fff" opacity=".08"/>
+    return `<svg class="${cls}" viewBox="0 ${hatTop ? -4 : 6} 120 ${hatTop ? 124 : 114}" role="img" aria-label="Dot the penguin">
+      <path class="body flipper l" d="M27 62c-11 5-17 20-14 33 7-3 14-12 16-22Z"/>
+      <path class="body flipper r" d="M93 62c11 5 17 20 14 33-7-3-14-12-16-22Z"/>
+      <path class="body" d="M60 20c24 0 38 21 38 50 0 27-15 42-38 42S22 97 22 70c0-29 14-50 38-50Z"/>
+      <path class="body" d="M57 22c-3-7 2-12 7-11-3 2-4 6-3 11Z"/>
+      <path d="M60 41c-5-6-23-7-27 7-3 12 3 22 6 28 4 9 4 24 21 31 17-7 17-22 21-31 3-6 9-16 6-28-4-14-22-13-27-7Z" fill="#fff"/>
+      <path d="M44 109c-8 0-12 4-11 8h20c1-4-1-8-9-8ZM76 109c8 0 12 4 11 8H67c-1-4 1-8 9-8Z" fill="#FF9F43"/>
       <g class="eyes">${eyes}</g>
-      <path d="M57 68h6l-3 3Z" fill="#FF8FA0"/>
-      ${mouth}
-      <circle cx="36" cy="72" r="5" fill="#FF8FA0" opacity=".45"/><circle cx="84" cy="72" r="5" fill="#FF8FA0" opacity=".45"/>
+      ${beak}
+      <ellipse cx="38" cy="70" rx="5" ry="3.5" fill="#FF8FA0" opacity=".55"/><ellipse cx="82" cy="70" rx="5" ry="3.5" fill="#FF8FA0" opacity=".55"/>
       ${hatSVG(hat)}
     </svg>`;
   }
@@ -350,6 +351,7 @@
     moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
     sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
     hat: '<path d="M2.5 18.5h19M6 18.5c0-6.5 2.4-11.5 6-11.5s6 5 6 11.5M7.6 13.5h8.8"/>',
+    fish: '<path d="M2.5 12c3-4.6 8.2-6 12.5-3.4L20.5 5v14l-5.5-3.6C10.7 18 5.5 16.6 2.5 12z"/><circle cx="8" cy="11" r=".9" fill="currentColor"/>',
     paw: '<ellipse cx="12" cy="16" rx="4.6" ry="4"/><ellipse cx="5.6" cy="10.6" rx="1.9" ry="2.4"/><ellipse cx="18.4" cy="10.6" rx="1.9" ry="2.4"/><ellipse cx="9.2" cy="6" rx="1.9" ry="2.4"/><ellipse cx="14.8" cy="6" rx="1.9" ry="2.4"/>',
     redo: '<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5M4 3.5v5h5"/>',
     peak: '<path d="M2 20 9.2 6.5l4 6.8 2.3-3.3L22 20z"/><path d="M7.6 9.6 9.2 11l1.4-1.4"/>',
@@ -422,8 +424,8 @@
     B('fun', 'lark', 'bronze', 'sun', 'Early Bird', 'Finish a lesson before 7 a.m.', () => S.lark, 1),
     B('fun', 'style', 'bronze', 'hat', 'Dressed Up', 'Buy an outfit for Dot', () => S.owned.length - 1, 1),
     B('fun', 'wardrobe', 'gold', 'hat', 'Fashion Icon', 'Own every outfit in the shop', () => S.owned.length - 1, Object.keys(HATS).length - 1),
-    B('fun', 'pet25', 'bronze', 'paw', 'Dot’s Best Friend', 'Pet Dot 25 times', () => S.pets, 25),
-    B('fun', 'pet100', 'silver', 'paw', 'Cat Whisperer', 'Pet Dot 100 times', () => S.pets, 100),
+    B('fun', 'pet25', 'bronze', 'fish', 'Dot’s Best Friend', 'Pet Dot 25 times', () => S.pets, 25),
+    B('fun', 'pet100', 'silver', 'fish', 'Penguin Whisperer', 'Pet Dot 100 times', () => S.pets, 100),
   ];
   const ACHMAP = Object.fromEntries(ACH.map((a) => [a.id, a]));
   const badgeArt = (a, big = false) => {

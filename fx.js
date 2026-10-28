@@ -102,7 +102,7 @@
   }, { passive: true });
 
   /* ---------- pet Dot ---------- */
-  const LINES = ['Purr…', 'You’ve got this!', 'One more lesson?', 'Meow!', 'Read the question first.', 'Predict, then pick.', 'Ink-credible!', 'Hehe, that tickles.', 'Watch the transition words.', 'Check every part of the choice.'];
+  const LINES = ['Waddle waddle!', 'You’ve got this!', 'One more lesson?', 'Squawk!', 'Brr, cool question coming up.', 'Slide into the next lesson?', 'Read the question first.', 'Predict, then pick.', 'Ink-credible!', 'Hehe, that tickles.', 'Watch the transition words.', 'Check every part of the choice.'];
   let pets = 0;
   function petDot(svg) {
     pets++;
