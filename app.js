@@ -258,9 +258,10 @@
   const mistakesPool = () => QS.filter((q) => { const r = S.q[q.id]; return r && r.w > 0 && r.box <= 1; });
   const reviewPool = () => QS.filter((q) => S.q[q.id]);
   const pt1Pool = () => QS.filter((q) => q.src === 'pt1');
+  const unitPool = (uid) => QS.filter((q) => SKMAP[q.s] && SKMAP[q.s].unit === uid);
   function buildQueue(mode, sid) {
     const now = Date.now();
-    let pool = mode === 'skill' ? QS.filter((q) => q.s === sid) : mode === 'mistakes' ? mistakesPool() : mode === 'review' ? reviewPool() : mode === 'pt1' ? pt1Pool() : QS.slice();
+    let pool = mode === 'unit' ? unitPool(sid) : mode === 'skill' ? QS.filter((q) => q.s === sid) : mode === 'mistakes' ? mistakesPool() : mode === 'review' ? reviewPool() : mode === 'pt1' ? pt1Pool() : QS.slice();
     let av = pool.filter((q) => isReady(q, now));
     if (mode === 'speed') av = av.filter((q) => ['mc', 'tf', 'cloze', 'punct', 'input'].includes(q.t));
     const wrong = shuffle(av.filter((q) => S.q[q.id] && S.q[q.id].box === 0));
@@ -268,6 +269,14 @@
     const due = av.filter((q) => S.q[q.id] && S.q[q.id].box > 0).sort((a, b) => S.q[a.id].due - S.q[b.id].due);
     if (mode === 'speed') return shuffle(av);
     if (mode === 'review' || mode === 'mistakes') return [...wrong, ...due].slice(0, REVIEW_LEN);
+    if (mode === 'unit') {
+      // Unit review: mistakes first, then test-style questions, then a shuffled mix across the unit's skills.
+      const pt = fresh.filter((q) => q.src === 'pt1'), rest = fresh.filter((q) => q.src !== 'pt1');
+      const bySkill = {}; for (const q of rest) (bySkill[q.s] = bySkill[q.s] || []).push(q);
+      const mixed = []; const lists = Object.values(bySkill);
+      for (let i = 0; mixed.length < rest.length; i++) for (const l of lists) if (l[i]) mixed.push(l[i]);
+      return [...wrong, ...pt.slice(0, 3), ...due.slice(0, 3), ...mixed, ...pt.slice(3), ...due.slice(3)].slice(0, REVIEW_LEN);
+    }
     if (mode === 'pt1') { const missed = fresh.filter((q) => q.missed); return [...wrong, ...missed, ...fresh.filter((q) => !q.missed), ...due].slice(0, REVIEW_LEN); }
     return [...wrong, ...fresh, ...due].slice(0, LESSON_LEN);
   }
@@ -727,10 +736,11 @@
     syncHearts();
     if (mode !== 'speed' && mode !== 'bell' && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
     const queue = mode === 'bell' ? (bellToday() ? [] : buildBell()) : buildQueue(mode, sid);
-    if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
+    if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
     L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false };
     if (mode === 'speed') L.speedEnd = Date.now() + SPEED_SECS * 1000;
     if (mode === 'skill' && !S.tried.includes(sid)) S.tried.push(sid);
+    if (mode === 'unit') L.unit = sid;
     buildLessonShell();
     showQuestion();
   }
@@ -915,6 +925,7 @@
     let title = 'Lesson complete!', mood = 'happy', sub = '';
     if (outOfHearts) { title = 'Out of hearts'; mood = 'sad'; sub = `Your answers were saved. Hearts refill one every 20 minutes, or you can refill them in the shop.`; }
     else if (L.mode === 'speed') { title = `Time! You scored ${L.speedScore}`; mood = L.speedScore >= 8 ? 'wow' : 'happy'; sub = S.bestSpeed === L.speedScore && L.speedScore > 0 ? 'That’s your best Speed Round yet.' : `Best so far: ${S.bestSpeed}`; }
+    else if (L.mode === 'unit' && !outOfHearts && answered) { title = perfect ? 'Perfect Unit Review!' : 'Unit Review complete!'; mood = perfect ? 'wow' : 'happy'; sub = `${UNMAP[L.unit].name}: ${right} of ${answered} right on the first try.`; }
     else if (L.mode === 'bell') { title = perfect ? 'Perfect Bell Ringer!' : 'Bell Ringer done!'; mood = perfect ? 'wow' : 'happy'; sub = perfect ? 'Every old answer still stuck. +15 XP bonus and +15 gems.' : `${right} of ${answered} right. Anything you missed is back in \u201cFix your mistakes.\u201d`; }
     else if (perfect) { title = 'Perfect lesson!'; mood = 'wow'; sub = 'No mistakes. +5 bonus XP and +5 bonus gems.'; }
     else if (answered && acc < 60) { sub = 'The ones you missed come back in about 10 minutes, so you can try them again soon.'; }
@@ -974,6 +985,48 @@
       <div class="tipline"><b>Tip:</b> ${esc(sk.tip)}</div>
       ${body}
       <p class="muted" style="margin:0;font-size:14px">Questions you get right rest for 1 day, then 3, 7, 16, and 35 days. Missed questions come back after 10 minutes.</p>`, `var(--${u.color});--uc2:var(--${u.color}b)`);
+  }
+  function unitStats(uid) {
+    const pool = unitPool(uid), now = Date.now();
+    const ready = pool.filter((q) => isReady(q, now)).length;
+    const mist = pool.filter((q) => { const r = S.q[q.id]; return r && r.w > 0 && r.box <= 1 && r.due <= now; }).length;
+    const pt = pool.filter((q) => q.src === 'pt1');
+    const mast = pool.filter((q) => S.q[q.id] && S.q[q.id].box >= 3).length;
+    return { total: pool.length, ready, mist, pt: pt.length, ptReady: pt.filter((q) => isReady(q, now)).length, mast, next: nextUnlock(pool) };
+  }
+  function unitSheet(uid) {
+    const u = UNMAP[uid], st = unitStats(uid), n = Math.min(st.ready, REVIEW_LEN);
+    const skills = SK.filter((s) => s.unit === uid).map((s) => s.name).join(', ');
+    openSheet(`
+      <div class="top"><div class="icon">${I.medal.replace('<svg', '<svg style="width:30px;height:30px"')}</div><div><div class="eyebrow">${esc(u.name)}</div><h2>Unit Review</h2></div></div>
+      <p class="muted" style="margin:0">A mixed practice round across ${esc(skills)}. Your mistakes come first, then Practice Test 1 questions, then a mix from every skill in the unit.</p>
+      <div class="kv"><div><b>${st.ready}</b><span>Ready now</span></div><div><b>${st.mist}</b><span>Mistakes to fix</span></div>${st.pt ? `<div><b>${st.ptReady}/${st.pt}</b><span>Practice Test 1</span></div>` : `<div><b>${st.mast}/${st.total}</b><span>Mastered</span></div>`}</div>
+      <div class="bar good" aria-label="Unit mastery"><i style="width:${st.total ? Math.round((st.mast / st.total) * 100) : 0}%"></i></div>
+      <p class="muted" style="margin:0;font-size:14px">${st.mast} of ${st.total} questions in this unit mastered.</p>
+      ${n ? `<button class="btn block" data-act="startunit" data-unit="${uid}">Start Unit Review \u00b7 ${n} questions</button>`
+        : `<div class="tipline">Everything in this unit is resting. The next question unlocks ${esc(fmtWhen(st.next))}.</div>`}`, `var(--${u.color});--uc2:var(--${u.color}b)`);
+  }
+  function reviewNodeHTML(u, i) {
+    const st = unitStats(u.id), r = 38, C = 2 * Math.PI * r, pct = st.total ? st.mast / st.total : 0;
+    const badge = st.ready > 0 ? `<span class="badge" title="${st.ready} ready">${Math.min(st.ready, 99)}</span>` : `<span class="badge clock">${I.clock}</span>`;
+    return `<div class="node-row" style="--i:${i}"><button class="node review ${st.ready ? '' : 'rest'}" data-act="unitreview" data-unit="${u.id}" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(u.name)} Unit Review: ${st.ready} ready">
+      <span class="disc"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--surface-2)" stroke-width="5"/><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--hl)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct)}" transform="rotate(-90 42 42)" class="ringfill" style="--c:${C}"/></svg>
+      <span class="face">${I.medal}</span>${badge}</span>
+      <span class="label">Unit Review</span>${st.mist ? `<span class="sublabel">${st.mist} to fix</span>` : st.ptReady ? `<span class="sublabel">${st.ptReady} test questions</span>` : ''}</button></div>`;
+  }
+  function practiceStrip() {
+    const now = Date.now();
+    const mr = mistakesPool().filter((q) => isReady(q, now)).length, rr = reviewPool().filter((q) => isReady(q, now)).length;
+    const pr = pt1Pool().filter((q) => isReady(q, now)).length;
+    const sr = QS.filter((q) => isReady(q, now) && ['mc', 'tf', 'cloze', 'punct', 'input'].includes(q.t)).length;
+    const tile = (m, g, icon, label, n, sub) => `<button class="ptile" data-act="mode" data-mode="${m}" ${n ? '' : 'disabled'} style="--pg:${g}"><span class="picon">${icon}</span><span class="ptext"><b>${label}</b><span>${n ? sub : 'Nothing ready'}</span></span>${n ? `<span class="pcount num">${n}</span>` : ''}</button>`;
+    return `<section class="pstrip" aria-label="Quick practice"><div class="row between"><h2>Quick practice</h2><button class="linkbtn" data-act="go" data-view="practice">All modes</button></div>
+      <div class="pgrid">
+        ${tile('mistakes', 'linear-gradient(135deg,var(--bad),var(--bad-2))', I.redo, 'Fix mistakes', mr, 'Missed recently')}
+        ${tile('review', 'var(--g-brand)', I.stack, 'Mixed review', rr, 'Due again')}
+        ${tile('pt1', 'linear-gradient(135deg,var(--u3),var(--u3b))', I.medal, 'Practice Test 1', pr, 'From your PSAT')}
+        ${tile('speed', 'linear-gradient(135deg,#FFB347,var(--flame),var(--flame-2))', I.bolt, 'Speed round', sr ? 60 : 0, '60 seconds')}
+      </div></section>`;
   }
   function heartsSheet() {
     const can = S.gems >= 30;
@@ -1047,7 +1100,7 @@
     const qs = todaysQuests();
     return `<div class="card"><div class="row between"><h2>Daily quests</h2><span class="chip">${S.daily.claimed.length}/3</span></div>
       ${qs.map((q) => { const p = Math.min(S.daily[q.key] || 0, q.goal), done = S.daily.claimed.includes(q.id);
-        return `<div class="quest ${done ? 'done' : ''}"><span style="font-weight:700">${esc(q.label)}</span><span class="reward">${done ? I.check : I.gem}${done ? 'Done' : '+' + q.reward}</span><div class="bar"><i style="width:${(p / q.goal) * 100}%"></i></div><span class="muted num" style="font-size:13px">${p} / ${q.goal}</span></div>`; }).join('')}
+        return `<div class="quest ${done ? 'qdone' : ''}"><span style="font-weight:700">${esc(q.label)}</span><span class="reward">${done ? I.check : I.gem}${done ? 'Done' : '+' + q.reward}</span><div class="bar"><i style="width:${(p / q.goal) * 100}%"></i></div><span class="muted num" style="font-size:13px">${p} / ${q.goal}</span></div>`; }).join('')}
       <p class="muted" style="margin:6px 0 0;font-size:13px">New quests every day at midnight.</p></div>`;
   }
   function streakCard() {
@@ -1098,17 +1151,16 @@
   }
 
   function viewLearn() {
-    const due = reviewPool().filter((q) => isReady(q)).length;
     let html = welcomeCard() + noticeCard() + reminderBanner() + bellCard();
     html += `<div class="aside-hide-wide">${todayCard()}</div>`;
-    if (due > 0) html += `<div class="banner" style="background:var(--surface);border-color:var(--line)">${I.redo.replace('<svg', '<svg style="color:var(--brand)"')}<span><b>${due} question${due === 1 ? ' is' : 's are'} ready for review.</b> Reviewing at the right time is how answers stick.</span><button class="btn small" data-act="mode" data-mode="review">Review</button></div>`;
+    html += practiceStrip();
     const nextSk = SK.find((s) => skillStats(s.id).ready > 0);
     let ni = 0;
     UN.forEach((u, ui) => {
       const skills = SK.filter((s) => s.unit === u.id);
       html += `<section class="unit" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(u.name)}">
         <div class="unit-head"><div><div class="eyebrow">Unit ${ui + 1} · ${ui < 5 ? 'Reading & Writing' : 'Math'}</div><h2>${esc(u.name)}</h2><p>${esc(u.blurb)}</p></div><div class="unit-num">${ui + 1}</div></div>
-        <div class="path">${skills.map((s) => nodeHTML(s, u.color, ni++, nextSk && s.id === nextSk.id)).join('')}</div></section>`;
+        <div class="path">${skills.map((s) => nodeHTML(s, u.color, ni++, nextSk && s.id === nextSk.id)).join('')}${reviewNodeHTML(u, ni++)}</div></section>`;
     });
     return html;
   }
@@ -1252,6 +1304,8 @@
       case 'skill': skillSheet(t.dataset.skill); break;
       case 'start': S.welcomed = true; save(); startLesson('skill', t.dataset.skill); break;
       case 'mode': startLesson(t.dataset.mode); break;
+      case 'unitreview': unitSheet(t.dataset.unit); break;
+      case 'startunit': startLesson('unit', t.dataset.unit); break;
       case 'quick': {
         if (reviewPool().some((q) => isReady(q))) startLesson('review');
         else { const s = SK.find((x) => skillStats(x.id).ready > 0); if (s) startLesson('skill', s.id); }

@@ -9,6 +9,7 @@ Bite-size PSAT practice in the style of a language-learning app: a skill path, s
 - **Daily Bell Ringer:** up to six questions you missed or answered longest ago, each rebuilt in a different format (true/false check, this-or-that, spot the error, explain why, reverse it, and more). Misses go back into review. Comes with a word of the day.
 - **Practice Test 1 review:** 54 questions rebuilt (in original wording) from the skills on PSAT Practice Test 1, in `questions-pt1.js`.
 - **9 question formats:** multiple choice, fill in the blank, true/false, match the pairs, sort into groups, put in order, tap the sentence or word, pick the punctuation, and type the answer.
+- **Practice built into the path:** a quick-practice row at the top of Learn (fix mistakes, mixed review, Practice Test 1, speed round) and a Unit Review node at the end of every unit that mixes all of that unit's skills, mistakes first.
 - **Spaced review:** a question you answer correctly rests for 1 day, then 3, 7, 16, and 35 days. Missed questions come back after 10 minutes and get one more try at the end of the lesson.
 - **Look and feel:** colorful gradients, animations throughout, light and dark themes.
 - **Motivation:** daily goal and streak (with streak freezes), hearts, gems, 3 rotating daily quests, 13 achievements, combo bonuses, sounds, confetti, and outfits for Dot the ink cat.
