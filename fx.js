@@ -106,6 +106,7 @@
   let pets = 0;
   function petDot(svg) {
     pets++;
+    document.dispatchEvent(new CustomEvent('ink:pet'));
     svg.classList.remove('petted'); void svg.getBoundingClientRect(); svg.classList.add('petted');
     const r = svg.getBoundingClientRect();
     burst(r.left + r.width / 2, r.top + r.height * 0.3, { count: 7, spread: 50, shapes: ['heart'], color: '#FF6B8B', lift: 40 });
@@ -154,7 +155,7 @@
 
   /* ---------- spotlight + 3D tilt follow the pointer ---------- */
   const SPOT = '.choice, .tile, .ptile, .mode, .item, .ach';
-  const TILT = '.ptile, .mode, .item, .bellcard, .ach, .stile, .unit-head, .card.hello, .kv > div';
+  const TILT = '.ptile, .mode, .item, .bellcard, .ach, .stile, .unit-head, .signpost, .card.hello, .kv > div';
   let tilted = null;
   function untilt() { if (!tilted) return; tilted.style.transform = ''; tilted.classList.remove('tilting'); tilted = null; }
   document.addEventListener('pointermove', (e) => {

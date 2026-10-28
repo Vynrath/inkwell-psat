@@ -27,6 +27,7 @@
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
     settings: { goal: 20, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
+    chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
   function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
@@ -330,25 +331,123 @@
   }
 
   /* ---------------------------------------------------------- achievements */
+  /* ------------------------------------------------------- badges (tiered) */
+  const TIER_NAME = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', diamond: 'Diamond' };
+  const BI = {
+    flame: '<path d="M12 2.5c.8 3.6 5.5 5.3 5.5 10.6a5.5 5.5 0 0 1-11 0c0-2.8 1.6-4.3 2.4-6.4 1.4 1.1 2.1 2.5 2.1 4.3 1.6-2 1.8-5.2 1-8.5z"/>',
+    bolt: '<path d="M13 2 4.5 13.5H11L10 22l9-12h-6.5z"/>',
+    book: '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5zM4 19.5A1.5 1.5 0 0 0 5.5 21H20v-3"/><path d="M8 7.5h8M8 11h6"/>',
+    star: '<path d="M12 2.8l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17l-5.6 3 1.1-6.2L3 9.4l6.2-.9z"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="M15.8 8.2 13.6 13.6 8.2 15.8 10.4 10.4z"/>',
+    chest: '<path d="M3.5 10.5h17V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1zM3.5 10.5A4.5 4.5 0 0 1 8 6h8a4.5 4.5 0 0 1 4.5 4.5"/><path d="M10.5 10.5h3v4h-3z"/>',
+    eye: '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    abc: '<path d="M3 18 7 6l4 12M4.4 14h5.2M14 6v12h3.2a3 3 0 0 0 0-6H14m0 0h2.6a3 3 0 0 0 0-6H14"/>',
+    calc: '<rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8.5 6.5h7M8.5 11h1M14.5 11h1M8.5 14.5h1M14.5 14.5h1M8.5 18h1M14.5 18h1"/>',
+    quill: '<path d="M20 3C11 4 6 10 5 19l-1 2M20 3c-1 7-5 11-11 12M20 3l-9 9"/>',
+    bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.8 1.8H4.2zM10 21a2 2 0 0 0 4 0"/>',
+    watch: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.6 1.8M9.5 2.5h5M12 2.5V6"/>',
+    moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+    sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
+    hat: '<path d="M2.5 18.5h19M6 18.5c0-6.5 2.4-11.5 6-11.5s6 5 6 11.5M7.6 13.5h8.8"/>',
+    paw: '<ellipse cx="12" cy="16" rx="4.6" ry="4"/><ellipse cx="5.6" cy="10.6" rx="1.9" ry="2.4"/><ellipse cx="18.4" cy="10.6" rx="1.9" ry="2.4"/><ellipse cx="9.2" cy="6" rx="1.9" ry="2.4"/><ellipse cx="14.8" cy="6" rx="1.9" ry="2.4"/>',
+    redo: '<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5M4 3.5v5h5"/>',
+    peak: '<path d="M2 20 9.2 6.5l4 6.8 2.3-3.3L22 20z"/><path d="M7.6 9.6 9.2 11l1.4-1.4"/>',
+    flag: '<path d="M5 21.5V3M5 3.5h12.5l-2.5 4.5 2.5 4.5H5"/>',
+    map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/>',
+    gem: '<path d="M6.5 3.5h11L21.5 9 12 20.5 2.5 9z"/><path d="M2.5 9h19M9 3.5 12 20.5 15 3.5"/>',
+    scroll: '<path d="M6 3.5h11.5a2 2 0 0 1 2 2V18a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 18v-1.5h11V18a2.5 2.5 0 0 0 2.5 2.5M6 3.5a2 2 0 0 0-2 2V7h4"/><path d="M9.5 8.5h6M9.5 12h6"/>',
+  };
+  const VOCAB_SK = new Set(['voc', 'wic', 'vta', 'vae', 'vas']);
+  const GENRE_SK = ['lit', 'soc', 'hum', 'nat'];
+  const correctIn = (pred) => { let n = 0; for (const q of QS) if (pred(q)) { const r = S.q[q.id]; if (r) n += r.c; } return n; };
+  const mastQ = () => { let n = 0; for (const k in S.q) if (S.q[k].box >= 3) n++; return n; };
+  const fullSkills = () => SK.filter((s) => { const st = skillStats(s.id); return st.total && st.mast === st.total; }).length;
+  const fullUnit = () => (UN.some((u) => { const p = unitPool(u.id); return p.length && p.every((q) => S.q[q.id] && S.q[q.id].box >= 3); }) ? 1 : 0);
+  const B = (cat, id, tier, icon, name, desc, val, goal) => ({ cat, id, tier, icon, name, desc, val, goal });
+  const BADGE_CATS = [['streak', 'Streaks'], ['xp', 'Experience'], ['lessons', 'Lessons'], ['skill', 'Skill & accuracy'], ['journey', 'Journey & exploration'], ['subject', 'Subjects'], ['bell', 'Bell Ringer & speed'], ['fun', 'Just for fun']];
   const ACH = [
-    { id: 'first', name: 'First Page', desc: 'Finish your first lesson', test: () => S.lessons >= 1 },
-    { id: 'streak3', name: 'Warming Up', desc: 'Reach a 3-day streak', test: () => S.best >= 3 },
-    { id: 'streak7', name: 'Week of Ink', desc: 'Reach a 7-day streak', test: () => S.best >= 7 },
-    { id: 'streak30', name: 'Unstoppable', desc: 'Reach a 30-day streak', test: () => S.best >= 30 },
-    { id: 'xp100', name: 'Century', desc: 'Earn 100 total XP', test: () => S.xp >= 100 },
-    { id: 'xp1000', name: 'Ink Machine', desc: 'Earn 1,000 total XP', test: () => S.xp >= 1000 },
-    { id: 'perfect', name: 'Spotless', desc: 'Finish a lesson with no mistakes', test: () => S.perfects >= 1 },
-    { id: 'combo10', name: 'On a Roll', desc: 'Get 10 right in a row', test: () => S.bestComboEver >= 10 },
-    { id: 'speed12', name: 'Quick Draw', desc: 'Score 12+ in a Speed Round', test: () => S.bestSpeed >= 12 },
-    { id: 'comeback', name: 'Comeback', desc: 'Finish a mistakes review', test: () => S.mistakeRuns >= 1 },
-    { id: 'explorer', name: 'Explorer', desc: `Try all ${SK.length} skills`, test: () => SK.every((s) => S.tried.includes(s.id)) },
-    { id: 'master', name: 'Mastered', desc: 'Master every question in one skill', test: () => SK.some((s) => { const st = skillStats(s.id); return st.mast === st.total; }) },
-    { id: 'bell1', name: 'Ding!', desc: 'Finish a Bell Ringer', test: () => S.bellRuns >= 1 },
-    { id: 'bell7', name: 'Class Is in Session', desc: 'Finish 7 Bell Ringers', test: () => S.bellRuns >= 7 },
-    { id: 'style', name: 'Dressed Up', desc: 'Buy an outfit for Dot', test: () => S.owned.length > 1 },
+    B('streak', 'streak3', 'bronze', 'flame', 'Warming Up', 'Reach a 3-day streak', () => S.best, 3),
+    B('streak', 'streak7', 'silver', 'flame', 'Week of Ink', 'Reach a 7-day streak', () => S.best, 7),
+    B('streak', 'streak14', 'silver', 'flame', 'Fortnight Flame', 'Reach a 14-day streak', () => S.best, 14),
+    B('streak', 'streak30', 'gold', 'flame', 'Unstoppable', 'Reach a 30-day streak', () => S.best, 30),
+    B('streak', 'streak60', 'gold', 'flame', 'Torchbearer', 'Reach a 60-day streak', () => S.best, 60),
+    B('streak', 'streak100', 'diamond', 'flame', 'Eternal Flame', 'Reach a 100-day streak', () => S.best, 100),
+    B('xp', 'xp100', 'bronze', 'bolt', 'Century', 'Earn 100 total XP', () => S.xp, 100),
+    B('xp', 'xp500', 'silver', 'bolt', 'Ink Spiller', 'Earn 500 total XP', () => S.xp, 500),
+    B('xp', 'xp1000', 'silver', 'bolt', 'Ink Machine', 'Earn 1,000 total XP', () => S.xp, 1000),
+    B('xp', 'xp2500', 'gold', 'bolt', 'Printing Press', 'Earn 2,500 total XP', () => S.xp, 2500),
+    B('xp', 'xp5000', 'diamond', 'bolt', 'Grand Library', 'Earn 5,000 total XP', () => S.xp, 5000),
+    B('lessons', 'first', 'bronze', 'book', 'First Page', 'Finish your first lesson', () => S.lessons, 1),
+    B('lessons', 'les10', 'bronze', 'book', 'Page Turner', 'Finish 10 lessons', () => S.lessons, 10),
+    B('lessons', 'les25', 'silver', 'book', 'Chapter Book', 'Finish 25 lessons', () => S.lessons, 25),
+    B('lessons', 'les50', 'gold', 'book', 'Novelist', 'Finish 50 lessons', () => S.lessons, 50),
+    B('lessons', 'les100', 'diamond', 'book', 'Epic Saga', 'Finish 100 lessons', () => S.lessons, 100),
+    B('skill', 'perfect', 'bronze', 'star', 'Spotless', 'Finish a lesson with no mistakes', () => S.perfects, 1),
+    B('skill', 'perfect5', 'silver', 'star', 'Clean Copy', 'Finish 5 perfect lessons', () => S.perfects, 5),
+    B('skill', 'perfect20', 'gold', 'star', 'Flawless Folio', 'Finish 20 perfect lessons', () => S.perfects, 20),
+    B('skill', 'combo10', 'bronze', 'target', 'On a Roll', 'Get 10 right in a row', () => S.bestComboEver, 10),
+    B('skill', 'combo20', 'silver', 'target', 'Hot Hand', 'Get 20 right in a row', () => S.bestComboEver, 20),
+    B('skill', 'combo30', 'gold', 'target', 'Untouchable', 'Get 30 right in a row', () => S.bestComboEver, 30),
+    B('skill', 'mast25', 'bronze', 'gem', 'Sticky Ink', 'Master 25 questions', mastQ, 25),
+    B('skill', 'mast100', 'silver', 'gem', 'Deep Roots', 'Master 100 questions', mastQ, 100),
+    B('skill', 'master', 'gold', 'gem', 'Mastered', 'Master every question in one skill', () => Math.min(1, fullSkills()), 1),
+    B('skill', 'master5', 'diamond', 'gem', 'Polymath', 'Master every question in 5 skills', fullSkills, 5),
+    B('skill', 'unitmaster', 'diamond', 'peak', 'Region Legend', 'Master every question in one region of the journey', fullUnit, 1),
+    B('journey', 'explorer', 'silver', 'compass', 'Explorer', `Try all ${SK.length} skills`, () => SK.filter((s) => S.tried.includes(s.id)).length, SK.length),
+    B('journey', 'genres', 'bronze', 'scroll', 'Genre Hopper', 'Try all four Passage Types skills', () => GENRE_SK.filter((s) => S.tried.includes(s)).length, 4),
+    B('journey', 'review1', 'bronze', 'map', 'Region Review', 'Finish a Unit Review', () => Object.keys(S.unitRuns).length, 1),
+    B('journey', 'reviewall', 'gold', 'map', 'Grand Tour', 'Finish a Unit Review in every region', () => Object.keys(S.unitRuns).length, UN.length),
+    B('journey', 'chest1', 'bronze', 'chest', 'Treasure Hunter', 'Open a treasure chest on the journey', () => Object.keys(S.chests).length, 1),
+    B('journey', 'chestall', 'gold', 'chest', 'Cartographer', 'Open every treasure chest', () => Object.keys(S.chests).length, UN.length),
+    B('journey', 'seen100', 'bronze', 'eye', 'Curious Mind', 'Answer 100 different questions', () => Object.keys(S.q).length, 100),
+    B('journey', 'seen250', 'silver', 'eye', 'Well Read', 'Answer 250 different questions', () => Object.keys(S.q).length, 250),
+    B('journey', 'seenall', 'diamond', 'flag', 'Seen It All', 'Answer every question in Inkwell', () => Object.keys(S.q).filter((k) => QS.some((q) => q.id === k)).length, QS.length),
+    B('subject', 'vocab50', 'silver', 'abc', 'Wordsmith', 'Get 50 vocabulary answers right', () => correctIn((q) => VOCAB_SK.has(q.s)), 50),
+    B('subject', 'read100', 'silver', 'quill', 'Close Reader', 'Get 100 reading & writing answers right', () => correctIn((q) => !MATH.has(q.s)), 100),
+    B('subject', 'passage40', 'silver', 'scroll', 'Bookworm', 'Get 40 Passage Types answers right', () => correctIn((q) => GENRE_SK.includes(q.s)), 40),
+    B('subject', 'math50', 'silver', 'calc', 'Number Cruncher', 'Get 50 math answers right', () => correctIn((q) => MATH.has(q.s)), 50),
+    B('subject', 'math150', 'gold', 'calc', 'Mathlete', 'Get 150 math answers right', () => correctIn((q) => MATH.has(q.s)), 150),
+    B('subject', 'pt1all', 'gold', 'medal', 'Test Veteran', 'Get every Practice Test 1 question right at least once', () => pt1Pool().filter((q) => S.q[q.id] && S.q[q.id].c > 0).length, pt1Pool().length),
+    B('bell', 'bell1', 'bronze', 'bell', 'Ding!', 'Finish a Bell Ringer', () => S.bellRuns, 1),
+    B('bell', 'bell7', 'silver', 'bell', 'Class Is in Session', 'Finish 7 Bell Ringers', () => S.bellRuns, 7),
+    B('bell', 'bell30', 'gold', 'bell', 'Bell Tower', 'Finish 30 Bell Ringers', () => S.bellRuns, 30),
+    B('bell', 'bellperfect', 'silver', 'bell', 'Perfect Pitch', 'Get every Bell Ringer question right', () => S.perfectBells, 1),
+    B('bell', 'speed6', 'bronze', 'watch', 'Off the Line', 'Score 6+ in a Speed Round', () => S.bestSpeed, 6),
+    B('bell', 'speed12', 'silver', 'watch', 'Quick Draw', 'Score 12+ in a Speed Round', () => S.bestSpeed, 12),
+    B('bell', 'speed20', 'gold', 'watch', 'Lightning Reader', 'Score 20+ in a Speed Round', () => S.bestSpeed, 20),
+    B('fun', 'comeback', 'bronze', 'redo', 'Comeback', 'Finish a mistakes review', () => S.mistakeRuns, 1),
+    B('fun', 'comeback5', 'silver', 'redo', 'Phoenix', 'Finish 5 mistakes reviews', () => S.mistakeRuns, 5),
+    B('fun', 'owl', 'bronze', 'moon', 'Night Owl', 'Finish a lesson after 10 p.m.', () => S.owl, 1),
+    B('fun', 'lark', 'bronze', 'sun', 'Early Bird', 'Finish a lesson before 7 a.m.', () => S.lark, 1),
+    B('fun', 'style', 'bronze', 'hat', 'Dressed Up', 'Buy an outfit for Dot', () => S.owned.length - 1, 1),
+    B('fun', 'wardrobe', 'gold', 'hat', 'Fashion Icon', 'Own every outfit in the shop', () => S.owned.length - 1, Object.keys(HATS).length - 1),
+    B('fun', 'pet25', 'bronze', 'paw', 'Dot’s Best Friend', 'Pet Dot 25 times', () => S.pets, 25),
+    B('fun', 'pet100', 'silver', 'paw', 'Cat Whisperer', 'Pet Dot 100 times', () => S.pets, 100),
   ];
+  const ACHMAP = Object.fromEntries(ACH.map((a) => [a.id, a]));
+  const badgeArt = (a, big = false) => {
+    const on = !!S.ach[a.id];
+    const icon = a.icon === 'medal' ? I.medal.replace(/<\/?svg[^>]*>/g, '') : BI[a.icon];
+    return `<span class="bhex t-${on ? a.tier : 'locked'}${big ? ' big' : ''}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${on ? icon : I.lock.replace(/<\/?svg[^>]*>/g, '')}</svg></span>`;
+  };
   function checkAch() {
-    for (const a of ACH) if (!S.ach[a.id] && a.test()) { S.ach[a.id] = Date.now(); toast(`Achievement unlocked: ${a.name}`, I.medal); }
+    let added = false;
+    for (const a of ACH) if (!S.ach[a.id] && a.val() >= a.goal) { S.ach[a.id] = Date.now(); S.newBadges.push(a.id); added = true; }
+    if (added && !L) setTimeout(showBadges, 250);
+  }
+  function showBadges() {
+    if (L || $('#sheet')) return;
+    const ids = S.newBadges.filter((id) => ACHMAP[id]); S.newBadges = []; save();
+    if (!ids.length) return;
+    const list = ids.slice(0, 6).map((id) => ACHMAP[id]), one = list.length === 1 ? list[0] : null;
+    openSheet(`<div class="badgecele">
+      <div class="eyebrow">${one ? `New ${TIER_NAME[one.tier]} badge` : 'New badges'}</div>
+      <div class="celebadges">${list.map((a, i) => `<div class="cb" style="--k:${i}">${badgeArt(a, true)}${one ? '' : `<b>${esc(a.name)}</b>`}</div>`).join('')}</div>
+      <h2>${one ? esc(one.name) : `${ids.length} badges unlocked!`}</h2>
+      <p class="muted" style="margin:0">${one ? esc(one.desc) : ids.length > 6 ? `Plus ${ids.length - 6} more. See them all on your profile.` : 'Nice work. See them all on your profile.'}</p>
+      <div class="row" style="justify-content:center;flex-wrap:wrap"><button class="btn" data-act="closesheet">Awesome!</button><button class="btn ghost" data-act="go" data-view="profile">See all badges</button></div></div>`);
+    sfx.win(); confetti();
   }
 
   /* ----------------------------------------------------------- sound & fx */
@@ -967,6 +1066,9 @@
     if (completed) { S.lessons++; S.daily.lessons++; }
     if (perfect) { S.perfects++; S.daily.perfect++; }
     if (completed && L.mode === 'mistakes') S.mistakeRuns++;
+    if (completed && L.mode === 'unit') S.unitRuns[L.unit] = (S.unitRuns[L.unit] || 0) + 1;
+    if (perfect && L.mode === 'bell') S.perfectBells++;
+    if (completed) { const hr = new Date().getHours(); if (hr >= 22) S.owl = 1; if (hr < 7 && hr >= 3) S.lark = 1; }
     checkQuests(); checkAch(); save();
     const secs = Math.round((Date.now() - L.start) / 1000);
     const acc = answered ? Math.round((right / answered) * 100) : 0;
@@ -1008,6 +1110,7 @@
     const el = $('#lesson'); if (el) el.remove();
     document.body.style.overflow = ''; document.body.classList.remove('in-lesson');
     renderView();
+    if (S.newBadges.length) setTimeout(showBadges, 350);
   }
 
   /* ============================================================ SHEETS */
@@ -1056,10 +1159,10 @@
       ${n ? `<button class="btn block" data-act="startunit" data-unit="${uid}">Start Unit Review \u00b7 ${n} questions</button>`
         : `<div class="tipline">Everything in this unit is resting. The next question unlocks ${esc(fmtWhen(st.next))}.</div>`}`, `var(--${u.color});--uc2:var(--${u.color}b)`);
   }
-  function reviewNodeHTML(u, i) {
+  function reviewNodeHTML(u, i, dx = 0) {
     const st = unitStats(u.id), r = 38, C = 2 * Math.PI * r, pct = st.total ? st.mast / st.total : 0;
     const badge = st.ready > 0 ? `<span class="badge" title="${st.ready} ready">${Math.min(st.ready, 99)}</span>` : `<span class="badge clock">${I.clock}</span>`;
-    return `<div class="node-row" style="--i:${i}"><button class="node review ${st.ready ? '' : 'rest'}" data-act="unitreview" data-unit="${u.id}" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(u.name)} Unit Review: ${st.ready} ready">
+    return `<div class="node-row ${S.unitRuns[u.id] ? 'visited' : ''}" style="--i:${i};--dx:${dx}"><button class="node review ${st.ready ? '' : 'rest'}" data-act="unitreview" data-unit="${u.id}" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(u.name)} Unit Review: ${st.ready} ready">
       <span class="disc"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--surface-2)" stroke-width="5"/><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--hl)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct)}" transform="rotate(-90 42 42)" class="ringfill" style="--c:${C}"/></svg>
       <span class="face">${I.medal}</span>${badge}</span>
       <span class="label">Unit Review</span>${st.mist ? `<span class="sublabel">${st.mist} to fix</span>` : st.ptReady ? `<span class="sublabel">${st.ptReady} test questions</span>` : ''}</button></div>`;
@@ -1191,12 +1294,102 @@
     </section>`;
   }
 
-  function nodeHTML(sk, uc, i = 0, isNext = false) {
+  /* ------------------------------------------------------------- journey */
+  const REGIONS = {
+    u1: { name: 'Word Woods', scene: 'trees' }, u2: { name: 'Structure Cliffs', scene: 'cliffs' }, u3: { name: 'Evidence Valley', scene: 'hills' },
+    u4: { name: 'Transition River', scene: 'river' }, u5: { name: 'Grammar Gardens', scene: 'flowers' }, u8: { name: 'Story Library', scene: 'books' },
+    u6: { name: 'Algebra Peaks', scene: 'peaks' }, u7: { name: 'Data Observatory', scene: 'stars' },
+  };
+  const region = (uid) => REGIONS[uid] || { name: UNMAP[uid].name, scene: 'hills' };
+  const EMB = {
+    trees: '<path d="M12 2 5.5 11.5h3.8L6 16.5h12l-3.3-5h3.8z"/><path d="M12 16.5V22"/>',
+    cliffs: '<path d="M2.5 21 7.5 9l3 4 3.5-9L21.5 21z"/>',
+    hills: '<path d="M1.5 19.5c3.5-7 7.5-7 10.5-2 3-5 7-6 10.5 2z"/><circle cx="17" cy="6" r="2.5"/>',
+    river: '<path d="M2.5 7.5c3-2.2 6.5 2.2 9.5 0s6.5-2.2 9.5 0M2.5 12.5c3-2.2 6.5 2.2 9.5 0s6.5-2.2 9.5 0M2.5 17.5c3-2.2 6.5 2.2 9.5 0s6.5-2.2 9.5 0"/>',
+    flowers: '<circle cx="12" cy="8" r="2"/><path d="M12 3.5v2.5M12 10v11M7.5 8H10M14 8h2.5M12 16c-3 0-4.5-2-4.5-3.5 2.5 0 4.5 1.5 4.5 3.5zM12 18.5c3 0 4.5-2 4.5-3.5-2.5 0-4.5 1.5-4.5 3.5z"/>',
+    books: '<path d="M3.5 4h4v16h-4zM8.5 4h4v16h-4zM14 5.2l3.8-1 3.8 14.8-3.8 1z"/>',
+    peaks: '<path d="M1.5 20.5 8.8 6.5l4 7 2.4-3.4 7.3 10.4z"/><path d="M7.2 9.6l1.6 1.5 1.5-1.5"/>',
+    stars: '<path d="M12 3.5l1.9 4.7 5 .4-3.8 3.3 1.2 4.9L12 14.2l-4.3 2.6 1.2-4.9-3.8-3.3 5-.4z"/><path d="M19 18.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/>',
+  };
+  const MOTIF = {
+    trees: ['<path d="M30 8 11 48h10L6 76h48L39 48h10z"/><rect x="27" y="76" width="6" height="11"/><path d="M68 30 56 56h7l-9 19h28l-9-19h7z" opacity=".6"/><rect x="65.5" y="75" width="5" height="9" opacity=".6"/>',
+      '<path d="M58 10 44 40h8L40 64h36L64 40h8z"/><rect x="55" y="64" width="6" height="12"/><path d="M20 40 10 62h6l-7 14h22l-7-14h6z" opacity=".6"/>'],
+    cliffs: ['<path d="M0 90 9 44l15-9 7-27 19 11 8 25 15 7 17 39z"/><path d="M24 36l5 20M50 20l-4 26" stroke="var(--bg)" stroke-width="2.5" fill="none" opacity=".45"/>',
+      '<path d="M8 90 22 52l12 4 10-30 14 20 10-8 14 52z"/><path d="M44 30l3 22" stroke="var(--bg)" stroke-width="2.5" fill="none" opacity=".45"/>'],
+    hills: ['<path d="M0 84c15-32 36-32 52 0z"/><path d="M34 86c16-26 40-26 56 0z" opacity=".6"/><circle cx="66" cy="22" r="10" opacity=".5"/>',
+      '<path d="M4 86c18-28 40-28 56 0z" opacity=".6"/><path d="M40 86c14-36 36-36 50 0z"/><path d="M14 30h18M18 24h10" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity=".5"/>'],
+    river: ['<path d="M2 30c14-10 29 10 43 0s29-10 43 0M2 52c14-10 29 10 43 0s29-10 43 0M2 74c14-10 29 10 43 0s29-10 43 0" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>',
+      '<path d="M10 86V50M18 86V40M26 86V56" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><ellipse cx="18" cy="38" rx="3.5" ry="9"/><ellipse cx="10" cy="48" rx="3" ry="8" opacity=".7"/><path d="M40 70c12-8 24 8 36 0" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity=".6"/>'],
+    flowers: ['<path d="M28 86V44M64 86V56" stroke="currentColor" stroke-width="3"/><circle cx="28" cy="34" r="7"/><circle cx="28" cy="20" r="7" opacity=".6"/><circle cx="16" cy="38" r="7" opacity=".6"/><circle cx="40" cy="38" r="7" opacity=".6"/><circle cx="64" cy="50" r="6"/><circle cx="64" cy="38" r="6" opacity=".6"/><circle cx="54" cy="54" r="6" opacity=".6"/><circle cx="74" cy="54" r="6" opacity=".6"/><path d="M28 66c-8 0-12-6-12-10 7 0 12 4 12 10z"/>',
+      '<path d="M46 88V40" stroke="currentColor" stroke-width="3"/><circle cx="46" cy="30" r="9"/><circle cx="46" cy="12" r="8" opacity=".55"/><circle cx="30" cy="34" r="8" opacity=".55"/><circle cx="62" cy="34" r="8" opacity=".55"/><path d="M46 70c10 0 15-7 15-12-8 0-15 5-15 12z"/>'],
+    books: ['<rect x="10" y="26" width="14" height="60" rx="2"/><rect x="26" y="16" width="14" height="70" rx="2" opacity=".6"/><rect x="42" y="34" width="12" height="52" rx="2"/><path d="M58 30l12-3 14 56-12 3z" opacity=".6"/>',
+      '<rect x="12" y="66" width="66" height="10" rx="2"/><rect x="18" y="54" width="56" height="12" rx="2" opacity=".6"/><rect x="14" y="44" width="60" height="10" rx="2"/><path d="M44 8l14 26H30z" opacity=".5"/>'],
+    peaks: ['<path d="M0 88 30 24l16 26 10-14 34 52z"/><path d="M24 36l6-12 6 12-6 4z" fill="var(--bg)" opacity=".7"/>',
+      '<path d="M6 88 44 12l40 76z"/><path d="M36 28l8-16 8 16-8 5z" fill="var(--bg)" opacity=".7"/><path d="M58 88l16-30 14 30z" opacity=".6"/>'],
+    stars: ['<path d="M24 12l3 8 8 1-6 5 2 8-7-4-7 4 2-8-6-5 8-1z"/><path d="M66 30l2 5 5 1-4 3 1 5-4-3-4 3 1-5-4-3 5-1z" opacity=".6"/><path d="M20 88V70a20 20 0 0 1 40 0v18z"/><path d="M44 58 64 40" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>',
+      '<circle cx="30" cy="26" r="14" opacity=".6"/><circle cx="36" cy="22" r="12" fill="var(--bg)" opacity=".8"/><path d="M66 50l2.5 6.5 6.5.5-5 4 1.5 6.5-5.5-3.5-5.5 3.5 1.5-6.5-5-4 6.5-.5z"/><circle cx="18" cy="70" r="3"/><circle cx="76" cy="16" r="2.5"/>'],
+  };
+  const sceneHTML = (scene, side) => { const m = MOTIF[scene] || MOTIF.hills;
+    return `<div class="scenery ${side}" aria-hidden="true">${[0, 1, 0].map((k, i) => `<svg viewBox="0 0 90 90" fill="currentColor" style="--s:${side === 'r' ? -1 : 1};--k:${i}">${m[(k + (side === 'r' ? 1 : 0)) % m.length]}</svg>`).join('')}</div>`; };
+  const CHEST_GEMS = 30;
+  const chestNeed = (uid) => Math.min(15, unitPool(uid).length);
+  const unitSeen = (uid) => unitPool(uid).filter((q) => S.q[q.id]).length;
+  const unitPct = (uid) => { const p = unitPool(uid); if (!p.length) return 0; let pts = 0; for (const q of p) { const r = S.q[q.id]; if (r) pts += Math.min(r.box, 3); } return Math.round((pts / (3 * p.length)) * 100); };
+  const chestSVG = (open) => `<svg class="chestsvg" viewBox="0 0 48 46" aria-hidden="true">${open ? '<circle cx="24" cy="18" r="13" fill="#FFE27A" opacity=".55"/><path d="M16 20l4-6 4 6-4 4zM26 18l4-5 4 5-4 4z" fill="#7EE8FA"/><path d="M21 17l3-4 3 4-3 3z" fill="#FF6B8B"/>' : ''}
+    <path d="M6 22h36v19a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3z" fill="#B5652B"/><path d="M6 26h36" stroke="#8E4A1F" stroke-width="1.5" opacity=".6"/><path d="M14 22v22M34 22v22" stroke="#FFD84A" stroke-width="3"/>
+    <g class="lid" ${open ? 'transform="translate(0 -9) rotate(-18 6 22)"' : ''}><path d="M6 22a10 10 0 0 1 10-10h16a10 10 0 0 1 10 10z" fill="#D2803A"/><path d="M14 13.5V22M34 13.5V22" stroke="#FFD84A" stroke-width="3"/><path d="M6 20.5h36V24H6z" fill="#FFD84A"/></g>
+    ${open ? '' : '<rect x="20" y="20" width="8" height="10" rx="2" fill="#FFE27A" stroke="#9A5A12" stroke-width="1.5"/><circle cx="24" cy="25" r="1.4" fill="#9A5A12"/>'}</svg>`;
+  function chestHTML(u, i, dx) {
+    const R = region(u.id), need = chestNeed(u.id), have = Math.min(need, unitSeen(u.id)), open = !!S.chests[u.id], ready = !open && have >= need;
+    return `<div class="node-row" style="--i:${i};--dx:${dx}"><button class="node chest ${open ? 'opened' : ready ? 'ready' : 'locked'}" data-act="chest" data-unit="${u.id}" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(R.name)} treasure chest: ${open ? 'opened' : ready ? 'ready to open' : `${have} of ${need} questions answered`}">
+      <span class="disc"><span class="face">${chestSVG(open)}</span>${ready ? '<span class="badge">!</span>' : ''}</span>
+      <span class="label">${open ? 'Chest opened' : ready ? 'Open the chest!' : 'Treasure chest'}</span>${open ? `<span class="sublabel">+${CHEST_GEMS} gems found</span>` : ready ? `<span class="sublabel">+${CHEST_GEMS} gems inside</span>` : `<span class="sublabel">${have}/${need} answered</span>`}</button></div>`;
+  }
+  function openChest(uid, btn) {
+    const R = region(uid);
+    if (S.chests[uid]) { toast(`You already opened the ${R.name} chest.`, I.gem); return; }
+    const need = chestNeed(uid), have = unitSeen(uid);
+    if (have < need) { const n = need - have; toast(`Answer ${n} more question${n === 1 ? '' : 's'} in ${R.name} to open this chest.`, I.lock); return; }
+    S.chests[uid] = Date.now(); S.gems += CHEST_GEMS; save();
+    sfx.win(); if (btn) btn.classList.add('popping');
+    setTimeout(() => { confetti(); toast(`+${CHEST_GEMS} gems from the ${R.name} chest!`, I.gem); checkAch(); save(); renderView(); }, 550);
+  }
+  function journeyOrder() { const out = []; UN.forEach((u) => SK.filter((s) => s.unit === u.id).forEach((s) => out.push(s))); return out; }
+  function drawTrail(animate) {
+    const j = document.getElementById('journey'); if (!j) return;
+    const svg = j.querySelector('svg.trail'), discs = [...j.querySelectorAll('.path .node .disc')];
+    if (!svg || !discs.length) return;
+    const amp = parseFloat(getComputedStyle(j).getPropertyValue('--amp')) || 1;
+    const off = (el) => { let x = 0, y = 0; while (el && el !== j) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; } return [x, y]; };
+    const pts = discs.map((d) => { const [x, y] = off(d), row = d.closest('.node-row'); const dx = parseFloat(row.style.getPropertyValue('--dx')) || 0;
+      return { x: x + d.offsetWidth / 2 + dx * amp, y: y + d.offsetHeight / 2, visited: row.classList.contains('visited') }; });
+    const th = j.querySelector('.trailhead'), sm = j.querySelector('.summit .flagpin');
+    if (th) { const [x, y] = off(th); pts.unshift({ x: x + th.offsetWidth / 2, y: y + th.offsetHeight / 2, visited: true }); }
+    if (sm) { const [x, y] = off(sm); pts.push({ x: x + sm.offsetWidth / 2, y: y + sm.offsetHeight / 2, visited: false }); }
+    const W = j.offsetWidth, H = j.offsetHeight;
+    const curve = (list) => list.map((p, i) => { if (!i) return `M${p.x.toFixed(1)} ${p.y.toFixed(1)}`; const a = list[i - 1], m = (p.y - a.y) / 2; return `C${a.x.toFixed(1)} ${(a.y + m).toFixed(1)} ${p.x.toFixed(1)} ${(p.y - m).toFixed(1)} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`; }).join('');
+    let last = 0; pts.forEach((p, i) => { if (p.visited) last = i; });
+    const stops = [...j.querySelectorAll('.region')].map((r) => { const cs = getComputedStyle(r); return [((off(r)[1] + r.offsetHeight / 2) / H).toFixed(3), cs.getPropertyValue('--uc').trim(), cs.getPropertyValue('--uc2').trim()]; });
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
+    svg.innerHTML = `<defs><linearGradient id="trailgrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="${H}">${stops.map(([o, a, b]) => `<stop offset="${o}" stop-color="${a}"/><stop offset="${Math.min(1, +o + 0.02)}" stop-color="${b}"/>`).join('')}</linearGradient></defs>
+      <path class="road" d="${curve(pts)}"/><path class="roadline" d="${curve(pts)}"/>${last > 0 ? `<path class="walked" d="${curve(pts.slice(0, last + 1))}"/>` : ''}`;
+    const walked = svg.querySelector('.walked');
+    if (walked && animate && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) && walked.getTotalLength) {
+      const len = walked.getTotalLength();
+      walked.style.strokeDasharray = len; walked.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: Math.min(2400, 600 + len * 0.35), easing: 'cubic-bezier(.2,.8,.2,1)', delay: 250, fill: 'backwards' });
+    }
+  }
+  let trailT = null;
+  window.addEventListener('resize', () => { clearTimeout(trailT); trailT = setTimeout(() => drawTrail(false), 120); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => drawTrail(false));
+
+  function nodeHTML(sk, uc, i = 0, isNext = false, dx = 0) {
     const st = skillStats(sk.id), r = 38, C = 2 * Math.PI * r;
     const badge = st.ready > 0 ? `<span class="badge" title="${st.ready} ready">${st.ready}</span>` : `<span class="badge clock" title="Next unlock in ${fmtDur(st.next - Date.now())}">${I.clock}</span>`;
-    return `<div class="node-row" style="--i:${i}"><button class="node ${st.ready ? '' : 'rest'} ${isNext ? 'next' : ''}" data-act="skill" data-skill="${sk.id}" style="--uc:var(--${uc});--uc2:var(--${uc}b)" aria-label="${esc(sk.name)}: ${st.ready} ready, ${Math.round(st.pct * 100)}% mastered">
+    const here = isNext ? `<span class="here ${dx >= 0 ? 'l' : 'r'}" aria-hidden="true">${mascot('happy', S.hat, 'mascot')}<i>You are here</i></span>` : '';
+    return `<div class="node-row ${st.seen ? 'visited' : ''}" style="--i:${i};--dx:${dx}"><button class="node ${st.ready ? '' : 'rest'} ${isNext ? 'next' : ''}" data-act="skill" data-skill="${sk.id}" style="--uc:var(--${uc});--uc2:var(--${uc}b)" aria-label="${esc(sk.name)}: ${st.ready} ready, ${Math.round(st.pct * 100)}% mastered">
       <span class="disc"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--surface-2)" stroke-width="5"/><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--hl)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - st.pct)}" transform="rotate(-90 42 42)" class="ringfill" style="--c:${C}"/></svg>${isNext ? `<span class="starttip">${S.tried.includes(sk.id) ? 'Next' : 'Start'}</span>` : ''}
-      <span class="face">${esc(sk.icon)}</span>${badge}</span>
+      <span class="face">${esc(sk.icon)}</span>${badge}</span>${here}
       <span class="label">${esc(sk.name)}</span></button></div>`;
   }
 
@@ -1204,14 +1397,28 @@
     let html = welcomeCard() + noticeCard() + reminderBanner() + bellCard();
     html += `<div class="aside-hide-wide">${todayCard()}</div>`;
     html += practiceStrip();
-    const nextSk = SK.find((s) => skillStats(s.id).ready > 0);
-    let ni = 0;
+    const order = journeyOrder();
+    const nextSk = order.find((s) => skillStats(s.id).seen === 0) || order.find((s) => skillStats(s.id).ready > 0);
+    const wave = (k) => Math.round(Math.sin(k * 0.82 + 0.4) * 62);
+    let ni = 0, gi = 0;
+    const opened = UN.filter((u) => S.chests[u.id]).length;
+    let allPts = 0; for (const q of QS) { const r = S.q[q.id]; if (r) allPts += Math.min(r.box, 3); }
+    const total = Math.round((allPts / (3 * QS.length)) * 100);
+    html += `<section class="journey" id="journey" aria-label="Your study journey"><svg class="trail" aria-hidden="true"></svg>
+      <div class="trailhead"><span class="thicon">${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + BI.map + '</svg>'}</span><span><b>Trailhead</b><small>Your PSAT journey starts here</small></span></div>`;
     UN.forEach((u, ui) => {
-      const skills = SK.filter((s) => s.unit === u.id);
-      html += `<section class="unit" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(u.name)}">
-        <div class="unit-head"><div><div class="eyebrow">Unit ${ui + 1} · ${ui < 5 ? 'Reading & Writing' : 'Math'}</div><h2>${esc(u.name)}</h2><p>${esc(u.blurb)}</p></div><div class="unit-num">${ui + 1}</div></div>
-        <div class="path">${skills.map((s) => nodeHTML(s, u.color, ni++, nextSk && s.id === nextSk.id)).join('')}${reviewNodeHTML(u, ni++)}</div></section>`;
+      const skills = SK.filter((s) => s.unit === u.id), R = region(u.id), pct = unitPct(u.id);
+      html += `<div class="region scene-${R.scene}" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(R.name)}: ${esc(u.name)}">
+        ${sceneHTML(R.scene, 'l')}${sceneHTML(R.scene, 'r')}
+        <div class="signpost"><span class="emblem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EMB[R.scene]}</svg></span>
+          <div class="sp-text"><div class="eyebrow">Stop ${ui + 1} · ${['u6', 'u7'].includes(u.id) ? 'Math' : 'Reading & Writing'}</div><h2>${esc(R.name)}</h2><p>${esc(u.name)}: ${esc(u.blurb)}</p></div>
+          <span class="sp-pct"><b class="num">${pct}%</b><span>explored</span></span></div>
+        <div class="path">${skills.map((s) => nodeHTML(s, u.color, ni++, nextSk && s.id === nextSk.id, wave(gi++))).join('')}${reviewNodeHTML(u, ni++, wave(gi++))}${chestHTML(u, ni++, wave(gi++))}</div></div>`;
     });
+    html += `<div class="summit"><span class="flagpin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BI.flag}</svg></span>
+      <div class="eyebrow">The summit</div><h2>${opened === UN.length && total >= 100 ? 'You conquered the whole map!' : opened === UN.length ? 'Every chest found!' : 'Keep climbing'}</h2>
+      <p class="muted" style="margin:0">Journey ${total}% explored · ${opened}/${UN.length} chests opened</p>
+      <div class="bar good" aria-label="Journey progress"><i style="width:${total}%"></i></div></div></section>`;
     return html;
   }
 
@@ -1255,13 +1462,27 @@
         <div class="stile"><b>${S.streak}</b><span>Day streak</span></div><div class="stile"><b>${S.best}</b><span>Best streak</span></div>
         <div class="stile"><b>${S.lessons}</b><span>Lessons</span></div><div class="stile"><b>${acc == null ? '–' : acc + '%'}</b><span>First-try accuracy</span></div>
         <div class="stile"><b>${seen}/${QS.length}</b><span>Questions seen</span></div><div class="stile"><b>${mast}</b><span>Mastered</span></div>
-        <div class="stile"><b>${S.bestSpeed}</b><span>Best speed round</span></div><div class="stile"><b>${Object.keys(S.ach).length}/${ACH.length}</b><span>Achievements</span></div>
+        <div class="stile"><b>${S.bestSpeed}</b><span>Best speed round</span></div><div class="stile"><b>${ACH.filter((a) => S.ach[a.id]).length}/${ACH.length}</b><span>Badges</span></div>
       </div>
       <div class="card stack"><h2>Last 5 weeks</h2><div class="heat" aria-label="Streak calendar">${heat}</div>
         <div class="legend"><span style="--c:var(--flame)">Goal met</span><span style="--c:var(--gem)">Freeze used</span><span style="--c:var(--surface-2)">Missed</span></div></div>
       <div class="card stack"><h2>Skills</h2><p class="muted" style="margin:0;font-size:14px">A question counts as mastered after you get it right three times in a row, spaced out over days.</p>
         <div class="tablewrap"><table class="data"><thead><tr><th>Skill</th><th class="num">Seen</th><th>Mastery</th><th class="num">Accuracy</th><th class="num">Ready</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-      <div class="card stack"><h2>Achievements</h2><div class="achs">${ACH.map((a) => `<div class="ach ${S.ach[a.id] ? '' : 'locked'}"><span class="medal">${S.ach[a.id] ? I.medal : I.lock}</span><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></div>`).join('')}</div></div>`;
+      ${badgesCard()}`;
+  }
+
+  function badgesCard() {
+    const got = ACH.filter((a) => S.ach[a.id]);
+    const tiers = ['bronze', 'silver', 'gold', 'diamond'].map((t) => `<span class="tierchip t-${t}"><i></i>${got.filter((a) => a.tier === t).length}/${ACH.filter((a) => a.tier === t).length} ${TIER_NAME[t]}</span>`).join('');
+    const groups = BADGE_CATS.map(([cat, label]) => {
+      const list = ACH.filter((a) => a.cat === cat), n = list.filter((a) => S.ach[a.id]).length;
+      return `<div class="bgroup"><div class="row between"><h3>${label}</h3><span class="muted num" style="font-size:13px">${n}/${list.length}</span></div><div class="achs">${list.map((a) => {
+        const on = !!S.ach[a.id], v = Math.min(a.val(), a.goal);
+        return `<div class="ach ${on ? 'got' : 'locked'}" title="${on ? 'Unlocked ' + new Date(S.ach[a.id]).toLocaleDateString() : esc(a.desc)}">${badgeArt(a)}<b>${esc(a.name)}</b><span>${esc(a.desc)}</span>
+          ${on ? `<em class="tier t-${a.tier}">${TIER_NAME[a.tier]}</em>` : `<span class="bprog"><span class="minibar"><i style="width:${Math.round((v / a.goal) * 100)}%"></i></span><small class="num">${v.toLocaleString()}/${a.goal.toLocaleString()}</small></span>`}</div>`;
+      }).join('')}</div></div>`;
+    }).join('');
+    return `<div class="card stack"><div class="row between" style="flex-wrap:wrap"><h2>Badges</h2><span class="num" style="font-weight:800">${got.length}/${ACH.length}</span></div><div class="tierchips">${tiers}</div>${groups}</div>`;
   }
 
   function viewShop() {
@@ -1325,7 +1546,9 @@
     const viewEl = $('#view');
     viewEl.innerHTML = render();
     if (v !== lastView) { restart(viewEl, 'enter'); window.scrollTo(0, 0); } else viewEl.classList.remove('enter');
+    const entered = v !== lastView;
     lastView = v;
+    if (v === 'learn') requestAnimationFrame(() => drawTrail(entered));
     const asideEl = $('#aside');
     asideEl.innerHTML = asideHTML();
     if (!asideDone) { asideEl.classList.add('enter'); asideDone = true; } else asideEl.classList.remove('enter');
@@ -1355,6 +1578,7 @@
       case 'start': S.welcomed = true; save(); startLesson('skill', t.dataset.skill); break;
       case 'mode': startLesson(t.dataset.mode); break;
       case 'unitreview': unitSheet(t.dataset.unit); break;
+      case 'chest': openChest(t.dataset.unit, t); break;
       case 'startunit': startLesson('unit', t.dataset.unit); break;
       case 'quick': {
         if (reviewPool().some((q) => isReady(q))) startLesson('review');
@@ -1417,6 +1641,7 @@
     }
   });
 
+  document.addEventListener('ink:pet', () => { S.pets++; checkAch(); save(); });
   window.addEventListener('hashchange', () => { closeSheet(); renderView(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { rollover(); if (!L) renderView(); } });
   setInterval(() => {
@@ -1436,5 +1661,6 @@
   rollover();
   renderView();
   tickReminder();
+  checkAch(); save();
   window.Inkwell = { state: () => S, questions: QS, current: () => (L && !L.ended ? L.q : null), bellVariant: (q, seed) => bellVariant(q, seeded(String(seed))) };
 })();
