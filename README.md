@@ -4,7 +4,7 @@ Bite-size PSAT practice in the style of a language-learning app: a skill path, s
 
 ## What's inside
 
-- **419 practice questions** across 20 skills, covering every PSAT Reading & Writing domain plus Algebra, Statistics, Advanced Math, and Geometry.
+- **558 practice questions** across 20 skills, covering every PSAT Reading & Writing domain plus Algebra, Statistics, Advanced Math, and Geometry.
 - **90 ACT/SAT vocabulary words** in three sets (tone and attitude, argument and evidence, academic and science), each with a meaning question, an in-context question, and match-the-pairs rounds. Generated from the word list in `vocab.js`.
 - **Daily Bell Ringer:** up to six questions you missed or answered longest ago, each rebuilt in a different format (true/false check, this-or-that, spot the error, explain why, reverse it, and more). Misses go back into review. Comes with a word of the day.
 - **Practice Test 1 review:** 54 questions rebuilt (in original wording) from the skills on PSAT Practice Test 1, in `questions-pt1.js`.
@@ -28,7 +28,7 @@ Progress is stored in the browser (`localStorage`). Settings has a backup code t
 
 ## Adding questions
 
-Questions live in `questions.js` and `questions-pt1.js`. Vocabulary lives in `vocab.js`: add a line `[word, part of speech, definition, sentence with ___]` and the app builds the questions for it. Each entry has an `id`, a skill (`s`), a format (`t`), and an explanation (`e`). The comment at the top of the file shows the fields for each format. Correct-answer choices are shuffled automatically, so you can list the right answer first.
+Questions live in `questions.js`, `questions-pt1.js`, and `questions-more.js`. The math in `questions-more.js` is generated from a fixed seed with answers computed in code, so you can add more generators there. Vocabulary lives in `vocab.js`: add a line `[word, part of speech, definition, sentence with ___]` and the app builds the questions for it. Each entry has an `id`, a skill (`s`), a format (`t`), and an explanation (`e`). The comment at the top of the file shows the fields for each format. Correct-answer choices are shuffled automatically, so you can list the right answer first.
 
 When you change files, bump `VERSION` in `sw.js` so installed copies pick up the update.
 
