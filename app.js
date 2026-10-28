@@ -478,6 +478,40 @@
   /* ============================================================ WIDGETS
      Each returns { el, check() -> {ok, answer}, reveal(ok), key?(n) }. ctx.ready(bool) toggles the Check button;
      ctx.auto(ok, answer) submits on its own (used by match). */
+  /* Pointer drag: a tap still works; moving more than 8px turns it into a drag with a floating copy. */
+  function draggable(el, getTargets, onDrop) {
+    el.classList.add('dragtile');
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || el.disabled) return;
+      const sx = e.clientX, sy = e.clientY, r = el.getBoundingClientRect();
+      let ghost = null, over = null;
+      const hit = (x, y) => getTargets().find((t) => { const b = t.getBoundingClientRect(); return x >= b.left && x <= b.right && y >= b.top && y <= b.bottom; });
+      const move = (ev) => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        if (!ghost) {
+          if (Math.hypot(dx, dy) < 8) return;
+          ghost = el.cloneNode(true); ghost.classList.add('ghostdrag'); ghost.classList.remove('sel');
+          Object.assign(ghost.style, { width: r.width + 'px', height: r.height + 'px', left: r.left + 'px', top: r.top + 'px' });
+          document.body.append(ghost); el.classList.add('dragging'); sfx.tap();
+        }
+        ev.preventDefault();
+        ghost.style.transform = `translate(${dx}px, ${dy}px) rotate(${Math.max(-8, Math.min(8, dx / 30))}deg) scale(1.06)`;
+        const t = hit(ev.clientX, ev.clientY);
+        if (t !== over) { if (over) over.classList.remove('dropover'); over = t; if (over) over.classList.add('dropover'); }
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
+        if (!ghost) return;
+        ghost.remove(); el.classList.remove('dragging');
+        if (over) over.classList.remove('dropover');
+        el.dataset.dragged = '1'; setTimeout(() => { delete el.dataset.dragged; }, 50);
+        if (over) onDrop(over);
+      };
+      document.addEventListener('pointermove', move, { passive: false }); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+    });
+  }
+  const wasDragged = (e) => e && e.currentTarget && e.currentTarget.dataset.dragged;
+
   function choiceButtons(texts, onPick, cls = 'choice') {
     return texts.map((t, k) => h('button', { class: cls, type: 'button', 'aria-pressed': 'false', onclick: () => onPick(k) },
       cls === 'choice' ? h('span', { class: 'k' }, String(k + 1)) : null, h('span', { html: t })));
@@ -580,7 +614,15 @@
     const n = q.pairs.length, L = shuffle([...Array(n).keys()]), R = shuffle([...Array(n).keys()]);
     let sel = null, matched = 0, mistakes = 0;
     const colL = h('div', { class: 'col' }), colR = h('div', { class: 'col' });
-    const mk = (side, i) => h('button', { class: 'tile', type: 'button', 'data-side': side, 'data-i': i, onclick: (e) => tapTile(e.currentTarget, side, i) }, q.pairs[i][side === 'L' ? 0 : 1]);
+    const mk = (side, i) => {
+      const el = h('button', { class: 'tile', type: 'button', 'data-side': side, 'data-i': i, onclick: (e) => { if (!wasDragged(e)) tapTile(e.currentTarget, side, i); } }, q.pairs[i][side === 'L' ? 0 : 1]);
+      draggable(el, () => [...(side === 'L' ? colR : colL).querySelectorAll('.tile:not(.done)')], (t) => {
+        if (el.classList.contains('done')) return;
+        if (sel) sel.el.classList.remove('sel');
+        sel = null; tapTile(el, side, i); tapTile(t, t.dataset.side, +t.dataset.i);
+      });
+      return el;
+    };
     colL.append(...L.map((i) => mk('L', i))); colR.append(...R.map((i) => mk('R', i)));
     function tapTile(el, side, i) {
       if (!sel || sel.side === side) { if (sel) sel.el.classList.remove('sel'); sel = { el, side, i }; el.classList.add('sel'); sfx.tap(); return; }
@@ -606,10 +648,13 @@
     });
     function drop(b) { if (sel == null) return; place.set(sel, b); sel = null; sfx.tap(); draw(); }
     function tile(i) {
-      return h('button', { class: 'tile' + (sel === i ? ' sel' : ''), type: 'button', 'data-i': i, onclick: () => {
+      const el = h('button', { class: 'tile' + (sel === i ? ' sel' : ''), type: 'button', 'data-i': i, onclick: (e) => {
+        if (wasDragged(e)) return;
         if (place.has(i)) { place.delete(i); sel = null; } else sel = sel === i ? null : i;
         sfx.tap(); draw();
       } }, q.items[i][0]);
+      draggable(el, () => bins.map((b) => b.el), (binEl) => { const b = bins.findIndex((x) => x.el === binEl); if (b >= 0) { place.set(i, b); sel = null; sfx.tap(); draw(); } });
+      return el;
     }
     function draw() {
       pool.replaceChildren(...order.filter((i) => !place.has(i)).map(tile));
@@ -619,7 +664,7 @@
     }
     draw();
     return {
-      el: h('div', { class: 'stack' }, h('p', { class: 'muted', style: 'margin:0' }, 'Tap a card, then tap a group.'), pool, h('div', { class: 'bins' }, ...bins.map((b) => b.el))),
+      el: h('div', { class: 'stack' }, h('p', { class: 'muted', style: 'margin:0' }, 'Drag each card into a group, or tap a card and then a group.'), pool, h('div', { class: 'bins' }, ...bins.map((b) => b.el))),
       check: () => ({ ok: q.items.every((it, i) => place.get(i) === it[1]), answer: q.bins.map((b, bi) => `${b}: ${q.items.filter((it) => it[1] === bi).map((it) => it[0]).join(', ')}`).join(' | ') }),
       reveal: () => {
         bins.forEach((bn) => { bn.el.style.pointerEvents = 'none'; bn.list.querySelectorAll('.tile').forEach((t) => { const i = +t.dataset.i; t.classList.add(q.items[i][1] === place.get(i) ? 'right' : 'wrong'); }); });
@@ -632,8 +677,12 @@
     const ans = [];
     const line = h('div', { class: 'orderline' }), pool = h('div', { class: 'orderpool' });
     function draw() {
-      line.replaceChildren(...(ans.length ? ans.map((i, k) => h('button', { class: 'tile', type: 'button', 'data-i': i, onclick: () => { ans.splice(k, 1); sfx.tap(); draw(); } }, h('span', { class: 'n' }, String(k + 1)), h('span', {}, q.tiles[i]))) : [h('span', { class: 'muted' }, 'Tap the pieces below in order.')]));
-      pool.replaceChildren(...order.filter((i) => !ans.includes(i)).map((i) => h('button', { class: 'tile', type: 'button', onclick: () => { ans.push(i); sfx.tap(); draw(); } }, q.tiles[i])));
+      line.replaceChildren(...(ans.length ? ans.map((i, k) => h('button', { class: 'tile', type: 'button', 'data-i': i, onclick: () => { ans.splice(k, 1); sfx.tap(); draw(); } }, h('span', { class: 'n' }, String(k + 1)), h('span', {}, q.tiles[i]))) : [h('span', { class: 'muted' }, 'Tap or drag the pieces below, in order.')]));
+      pool.replaceChildren(...order.filter((i) => !ans.includes(i)).map((i) => {
+        const el = h('button', { class: 'tile', type: 'button', onclick: (e) => { if (wasDragged(e)) return; ans.push(i); sfx.tap(); draw(); } }, q.tiles[i]);
+        draggable(el, () => [line], () => { ans.push(i); sfx.tap(); draw(); });
+        return el;
+      }));
       ctx.ready(ans.length === n);
     }
     draw();
@@ -836,6 +885,7 @@
       if (ok) { S.totalCorrect++; S.daily.correct++; if (MATH.has(q.s)) S.daily.math++; }
     }
     L.w.reveal(ok);
+    document.dispatchEvent(new CustomEvent('ink:answer', { detail: { ok, combo: ok ? L.combo + 1 : 0 } }));
     if (ok) {
       L.combo++; L.maxCombo = Math.max(L.maxCombo, L.combo);
       L.xp += (first ? 2 : 1) + (L.combo >= 3 ? 1 : 0);
@@ -1105,7 +1155,7 @@
   }
   function streakCard() {
     return `<div class="card stack"><div class="row between"><div class="row" style="gap:8px"><span style="width:28px;height:28px;color:var(--flame);display:inline-block">${I.flame}</span><h2>${S.streak} day streak</h2></div><span class="chip" title="Streak freezes">${I.snow.replace('<svg', '<svg style="width:14px;height:14px"')} ${S.freezes}/2</span></div>
-      ${weekStrip()}<p class="muted" style="margin:0;font-size:13px">Best: ${S.best} days. A streak freeze covers a missed day automatically.</p></div>`;
+      ${weekStrip()}<p class="muted" style="margin:0;font-size:13px">Best: ${S.best} day${S.best === 1 ? "" : "s"}. A streak freeze covers a missed day automatically.</p></div>`;
   }
   function asideHTML() { return todayCard() + questsCard() + streakCard(); }
 

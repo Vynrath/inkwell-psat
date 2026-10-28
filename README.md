@@ -12,6 +12,7 @@ Bite-size PSAT practice in the style of a language-learning app: a skill path, s
 - **Practice built into the path:** a quick-practice row at the top of Learn (fix mistakes, mixed review, Practice Test 1, speed round) and a Unit Review node at the end of every unit that mixes all of that unit's skills, mistakes first.
 - **Spaced review:** a question you answer correctly rests for 1 day, then 3, 7, 16, and 35 days. Missed questions come back after 10 minutes and get one more try at the end of the lesson.
 - **Look and feel:** colorful gradients, animations throughout, light and dark themes.
+- **Interactive touches (`fx.js`):** Dot follows your pointer, reacts when you tap him, and rides the lesson progress bar; cards tilt toward the cursor; taps ripple; correct answers burst with sparkles; phones get a light buzz; drag-and-drop for sort, match, and order questions.
 - **Motivation:** daily goal and streak (with streak freezes), hearts, gems, 3 rotating daily quests, 13 achievements, combo bonuses, sounds, confetti, and outfits for Dot the ink cat.
 - **Reminders:** an in-app banner after your reminder time, browser notifications, and a repeating calendar event (`.ics`) that works even when the app is closed.
 - Works offline and can be installed to a phone's home screen.
