@@ -257,9 +257,10 @@
   }
   const mistakesPool = () => QS.filter((q) => { const r = S.q[q.id]; return r && r.w > 0 && r.box <= 1; });
   const reviewPool = () => QS.filter((q) => S.q[q.id]);
+  const pt1Pool = () => QS.filter((q) => q.src === 'pt1');
   function buildQueue(mode, sid) {
     const now = Date.now();
-    let pool = mode === 'skill' ? QS.filter((q) => q.s === sid) : mode === 'mistakes' ? mistakesPool() : mode === 'review' ? reviewPool() : QS.slice();
+    let pool = mode === 'skill' ? QS.filter((q) => q.s === sid) : mode === 'mistakes' ? mistakesPool() : mode === 'review' ? reviewPool() : mode === 'pt1' ? pt1Pool() : QS.slice();
     let av = pool.filter((q) => isReady(q, now));
     if (mode === 'speed') av = av.filter((q) => ['mc', 'tf', 'cloze', 'punct', 'input'].includes(q.t));
     const wrong = shuffle(av.filter((q) => S.q[q.id] && S.q[q.id].box === 0));
@@ -267,6 +268,7 @@
     const due = av.filter((q) => S.q[q.id] && S.q[q.id].box > 0).sort((a, b) => S.q[a.id].due - S.q[b.id].due);
     if (mode === 'speed') return shuffle(av);
     if (mode === 'review' || mode === 'mistakes') return [...wrong, ...due].slice(0, REVIEW_LEN);
+    if (mode === 'pt1') { const missed = fresh.filter((q) => q.missed); return [...wrong, ...missed, ...fresh.filter((q) => !q.missed), ...due].slice(0, REVIEW_LEN); }
     return [...wrong, ...fresh, ...due].slice(0, LESSON_LEN);
   }
   function nextUnlock(pool) {
@@ -684,7 +686,9 @@
     const retry = L.retried.has(q.id) && L.first.has(q.id);
     wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, KIND[q.t]),
       h('span', { class: 'chip', style: `background:var(--${unit.color});color:#fff` }, skill.name),
-      retry ? h('span', { class: 'chip' }, 'Second try') : null));
+      retry ? h('span', { class: 'chip' }, 'Second try') : null,
+      q.src === 'pt1' ? h('span', { class: 'chip' }, `Practice Test 1 \u00b7 Q${q.tq}`) : null,
+      q.missed ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, 'You missed this on the test') : null));
     if (q.tbl) wrap.append(h('div', { html: tableHTML(q.tbl) }));
     if (q.bars) wrap.append(h('div', { html: barsHTML(q.bars) }));
     if (q.graph) wrap.append(h('div', { html: graphHTML(q.graph) }));
@@ -1012,6 +1016,7 @@
       <div class="modes">
         ${mode('mistakes', 'var(--bad)', I.redo, 'Fix your mistakes', 'Questions you missed recently, while they’re fresh.', mr, mist.length ? `Nothing to fix yet. Next one is ready in ${fmtDur(nm - Date.now())}.` : 'No mistakes to fix yet. Nice.')}
         ${mode('review', 'var(--brand)', I.stack, 'Mixed review', 'Questions across all skills that are due again.', rr, rv.length ? `Nothing is due. Next review unlocks in ${fmtDur(nr - Date.now())}.` : 'Answer a few questions first. Reviews unlock after a day.')}
+        ${(() => { const pp = pt1Pool(); return mode('pt1', 'var(--u3)', I.medal, 'Practice Test 1 review', `${pp.length} questions rebuilt from your PSAT practice test, starting with the one you missed.`, pp.filter((q) => isReady(q)).length, `All ${pp.length} are resting. Next one unlocks in ${fmtDur(nextUnlock(pp) - Date.now())}.`); })()}
         ${mode('speed', 'var(--flame)', I.bolt, 'Speed round', `Answer as many as you can in ${SPEED_SECS} seconds. No hearts lost.`, QS.filter((q) => isReady(q) && ['mc', 'tf', 'cloze', 'punct', 'input'].includes(q.t)).length, 'Everything is resting. Come back later.')}
       </div>
       <div class="card stack"><h2>Coming back soon</h2><p class="muted" style="margin:0">Questions you answer rest before you see them again. Here’s when they return.</p>
