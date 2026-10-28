@@ -24,11 +24,11 @@
     v: 1, xp: 0, gems: 60, hearts: MAX_HEARTS, heartsAt: Date.now(),
     streak: 0, best: 0, lastGoalDay: null, freezes: 1, days: {},
     daily: freshDaily(), q: {}, ach: {}, owned: ['none'], hat: 'none',
-    lessons: 0, perfects: 0, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
+    lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
     settings: { goal: 20, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
   });
-  function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, claimed: [] }; }
+  function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
     for (const k in o) {
       const a = d[k], b = o[k];
@@ -294,6 +294,7 @@
     { id: 'correct', label: (g) => `Answer ${g} questions correctly`, goals: [15, 25], key: 'correct' },
     { id: 'perfect', label: () => 'Finish a lesson with no mistakes', goals: [1], key: 'perfect' },
     { id: 'math', label: (g) => `Get ${g} math questions right`, goals: [5, 10], key: 'math' },
+    { id: 'bell', label: () => 'Finish today\u2019s Bell Ringer', goals: [1], key: 'bell' },
   ];
   function seeded(seed) {
     let x = 2166136261;
@@ -331,8 +332,10 @@
     { id: 'combo10', name: 'On a Roll', desc: 'Get 10 right in a row', test: () => S.bestComboEver >= 10 },
     { id: 'speed12', name: 'Quick Draw', desc: 'Score 12+ in a Speed Round', test: () => S.bestSpeed >= 12 },
     { id: 'comeback', name: 'Comeback', desc: 'Finish a mistakes review', test: () => S.mistakeRuns >= 1 },
-    { id: 'explorer', name: 'Explorer', desc: 'Try all 17 skills', test: () => S.tried.length >= SK.length },
+    { id: 'explorer', name: 'Explorer', desc: `Try all ${SK.length} skills`, test: () => SK.every((s) => S.tried.includes(s.id)) },
     { id: 'master', name: 'Mastered', desc: 'Master every question in one skill', test: () => SK.some((s) => { const st = skillStats(s.id); return st.mast === st.total; }) },
+    { id: 'bell1', name: 'Ding!', desc: 'Finish a Bell Ringer', test: () => S.bellRuns >= 1 },
+    { id: 'bell7', name: 'Class Is in Session', desc: 'Finish 7 Bell Ringers', test: () => S.bellRuns >= 7 },
     { id: 'style', name: 'Dressed Up', desc: 'Buy an outfit for Dot', test: () => S.owned.length > 1 },
   ];
   function checkAch() {
@@ -484,11 +487,11 @@
   function wTF(q, ctx) {
     let sel = null;
     const box = h('div', { class: 'choices tfrow' });
-    const btns = choiceButtons(['True', 'False'], (k) => { sel = k === 0; btns.forEach((b, j) => b.setAttribute('aria-pressed', j === k)); sfx.tap(); ctx.ready(true); });
+    const btns = choiceButtons(q.labels || ['True', 'False'], (k) => { sel = k === 0; btns.forEach((b, j) => b.setAttribute('aria-pressed', j === k)); sfx.tap(); ctx.ready(true); });
     btns.forEach((b) => b.querySelector('.k').remove());
     box.append(...btns);
     return {
-      el: box, check: () => ({ ok: sel === q.a, answer: q.a ? 'True' : 'False' }),
+      el: box, check: () => ({ ok: sel === q.a, answer: (q.labels || ['True', 'False'])[q.a ? 0 : 1] }),
       reveal: () => { box.classList.add('locked'); btns.forEach((b, k) => { const v = k === 0; if (v === q.a) b.classList.add('right'); else if (v === sel) b.classList.add('wrong'); }); },
       key: (n) => btns[n - 1] && btns[n - 1].click(),
     };
@@ -631,6 +634,89 @@
     };
   }
 
+  /* ============================================================ BELL RINGER
+     Brings back questions you missed or answered a while ago, rebuilt in a different format. */
+  const BELL_LEN = 6;
+  const bellToday = () => S.bell && S.bell.day === dayKey() && S.bell.done;
+  const seenPool = () => QS.filter((q) => S.q[q.id]);
+  const vocabWord = (w) => (window.INK_WORDS || []).find((x) => x.w === w);
+  function bellVariant(q, r) {
+    const pickOne = (arr) => arr[Math.floor(r() * arr.length)];
+    const base = { id: 'bell-' + q.id, s: q.s, orig: q.id, origType: q.t, bell: true, tbl: q.tbl, bars: q.bars, graph: q.graph, src: q.src, tq: q.tq };
+    const YN = ['Yes', 'No'];
+    const wrongChoices = (q.c || []).filter((_, i) => i !== q.a);
+    if (q.vw && (q.t === 'mc' || q.t === 'cloze')) {
+      const me = vocabWord(q.vw), pool = (window.INK_WORDS || []).filter((x) => x.pos === me.pos && x.w !== me.w);
+      const opts = shuffle(pool).slice(0, 3);
+      if (q.t === 'mc') return { ...base, t: 'mc', kind: 'Reverse it', q: `Which word means \u201c${me.d}\u201d?`, c: [me.w, ...opts.map((x) => x.w)], a: 0, e: `${me.w} means ${me.d}.` };
+      return { ...base, t: 'mc', kind: 'Meaning in context', p: me.s.replace('___', `<b>${me.w}</b>`), q: `As used here, what does <b>${me.w}</b> most nearly mean?`, c: [me.d, ...opts.map((x) => x.d)], a: 0, e: `${me.w} means ${me.d}.` };
+    }
+    switch (q.t) {
+      case 'mc': {
+        if (r() < 0.35) return { ...base, t: 'mc', kind: 'This or that', p: q.p, q: q.q, c: [q.c[q.a], pickOne(wrongChoices)], a: 0, e: q.e };
+        const right = r() < 0.5, shown = right ? q.c[q.a] : pickOne(wrongChoices);
+        return { ...base, t: 'tf', kind: 'Check the answer', labels: YN, p: q.p, q: `${q.q}<div class="proposed">Proposed answer: <b>${shown}</b></div>Is that the best answer?`, a: right, e: `The best answer is \u201c${strip(q.c[q.a])}.\u201d ${q.e}` };
+      }
+      case 'cloze': {
+        const right = r() < 0.5, shown = right ? q.c[q.a] : pickOne(wrongChoices);
+        return { ...base, t: 'tf', kind: 'Check the answer', labels: YN, p: q.p.replace('___', `<mark>${shown}</mark>`), q: 'Does the highlighted word or phrase complete the text logically and precisely?', a: right, e: `The best choice is \u201c${q.c[q.a]}.\u201d ${q.e}` };
+      }
+      case 'punct': {
+        const right = r() < 0.5, shown = right ? q.c[q.a] : pickOne(wrongChoices);
+        return { ...base, t: 'tf', kind: 'Spot the error', labels: YN, p: punctSentence(q, shown), q: 'Is this sentence punctuated correctly?', a: right, e: `Correct version: ${punctSentence(q, q.c[q.a])} ${q.e}` };
+      }
+      case 'tf': {
+        const others = shuffle(QS.filter((x) => x.id !== q.id && x.e && x.s === q.s && x.t !== 'match')).slice(0, 2);
+        const fill = shuffle(QS.filter((x) => x.id !== q.id && x.t === 'tf')).slice(0, 2 - others.length);
+        return { ...base, t: 'mc', kind: 'Explain why', p: q.p, q: `<i>\u201c${strip(q.q)}\u201d</i><br>This statement is <b>${q.a ? 'true' : 'false'}</b>. Which explanation shows why?`, c: [q.e, ...[...others, ...fill].map((x) => x.e)], a: 0, e: q.e };
+      }
+      case 'input': {
+        const n = parseNum(norm(q.a[0]));
+        if (isNaN(n)) return { ...base, t: 'tf', kind: 'Check the answer', labels: YN, p: q.p, q: `${q.q}<div class="proposed">Proposed answer: <b>${q.a[0]}</b></div>Is that right?`, a: true, e: q.e };
+        const fmt = (v) => String(Math.round(v * 100) / 100);
+        const cands = [n + 1, n - 1, n * 2, n / 2, -n, n + 10, n - 10, n * 1.5, n + 5].map((v) => fmt(v)).filter((v, i, a) => v !== fmt(n) && a.indexOf(v) === i);
+        return { ...base, t: 'mc', kind: 'Pick the answer', p: q.p, q: q.q, c: [fmt(n), ...shuffle(cands).slice(0, 3)], a: 0, e: q.e };
+      }
+      case 'match': {
+        const i = Math.floor(r() * q.pairs.length);
+        return { ...base, t: 'mc', kind: 'One pair', q: `Which one goes with <b>${q.pairs[i][0]}</b>?`, c: [q.pairs[i][1], ...q.pairs.filter((_, j) => j !== i).map((p2) => p2[1])], a: 0, e: q.e };
+      }
+      case 'sort': {
+        const it = pickOne(q.items), right = r() < 0.5, bin = right ? it[1] : 1 - it[1];
+        return { ...base, t: 'tf', kind: 'Quick sort', p: q.p, q: `${q.q}<div class="proposed">\u201c${it[0]}\u201d \u2192 <b>${q.bins[bin]}</b></div>Is that the right group?`, labels: YN, a: right, e: `\u201c${it[0]}\u201d belongs in ${q.bins[it[1]]}. ${q.e}` };
+      }
+      case 'tap': {
+        const opts = [q.segs[q.a], ...shuffle(q.segs.filter((_, i) => i !== q.a)).slice(0, 3)];
+        return { ...base, t: 'mc', kind: 'Choose it', p: q.p, q: q.q.replace(/^Tap/, 'Pick'), c: opts, a: 0, e: q.e };
+      }
+      case 'order': {
+        const last = r() < 0.5;
+        return { ...base, t: 'mc', kind: last ? 'Last step' : 'First step', q: `${q.q} Which piece comes ${last ? 'last' : 'first'}?`, c: [last ? q.tiles[q.tiles.length - 1] : q.tiles[0], ...q.tiles.slice(last ? 0 : 1, last ? -1 : undefined)].slice(0, 4), a: 0, e: q.e };
+      }
+      default: return null;
+    }
+  }
+  function buildBell() {
+    const seen = seenPool();
+    if (seen.length < 3) return [];
+    const r = seeded('bell' + dayKey() + seen.length);
+    const missed = seen.filter((q) => S.q[q.id].w > 0).sort((a, b) => S.q[b.id].seen - S.q[a.id].seen);
+    const old = seen.filter((q) => S.q[q.id].w === 0).sort((a, b) => S.q[a.id].seen - S.q[b.id].seen);
+    const picks = [...missed.slice(0, 4)];
+    for (const q of [...old, ...missed.slice(4)]) { if (picks.length >= BELL_LEN) break; picks.push(q); }
+    return shuffle(picks).map((q) => bellVariant(q, r)).filter(Boolean);
+  }
+  function bellGrade(q, ok) {
+    if (ok) return;
+    const r = S.q[q.orig] || { box: 0, c: 0, w: 0, due: 0, seen: 0 };
+    r.box = 0; r.w++; r.seen = Date.now(); r.due = Date.now() + INTERVALS[0];
+    S.q[q.orig] = r;
+  }
+  function wordOfDay() {
+    const W = window.INK_WORDS || []; if (!W.length) return null;
+    return W[Math.floor(seeded('wotd' + dayKey())() * W.length)];
+  }
+
   /* ============================================================ LESSON */
   let L = null;
   const PRAISE = ['Nice!', 'Correct!', 'You got it.', 'Sharp reading.', 'Exactly right.', 'Great work!', 'Nailed it.'];
@@ -639,9 +725,9 @@
   function startLesson(mode, sid) {
     closeSheet();
     syncHearts();
-    if (mode !== 'speed' && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
-    const queue = buildQueue(mode, sid);
-    if (!queue.length) { if (mode === 'skill') skillSheet(sid); else toast('Nothing is ready in that mode right now.', I.clock); return; }
+    if (mode !== 'speed' && mode !== 'bell' && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
+    const queue = mode === 'bell' ? (bellToday() ? [] : buildBell()) : buildQueue(mode, sid);
+    if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
     L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false };
     if (mode === 'speed') L.speedEnd = Date.now() + SPEED_SECS * 1000;
     if (mode === 'skill' && !S.tried.includes(sid)) S.tried.push(sid);
@@ -672,6 +758,9 @@
       bar.style.width = `${100 - (left / (SPEED_SECS * 1000)) * 100}%`;
       st.innerHTML = `<span class="timer num">${Math.ceil(left / 1000)}s</span>`;
       if (left <= 0 && L.state === 'answer' && !L.ended) finishLesson();
+    } else if (L.mode === 'bell') {
+      bar.style.width = `${(L.done / L.total) * 100}%`;
+      st.innerHTML = `<span class="hearts" style="color:var(--flame)" aria-label="Bell Ringer">${I.bell}<span>${L.done}/${L.total}</span></span>`;
     } else {
       bar.style.width = `${(L.done / L.total) * 100}%`;
       st.innerHTML = S.settings.hearts ? `<span class="hearts" aria-label="${S.hearts} hearts">${I.heart}<span>${S.hearts}</span></span>` : `<span class="hearts" aria-label="Unlimited hearts">${I.heart}<span>∞</span></span>`;
@@ -684,9 +773,10 @@
     const skill = SKMAP[q.s], unit = UNMAP[skill.unit];
     const wrap = h('div', { class: 'qwrap' });
     const retry = L.retried.has(q.id) && L.first.has(q.id);
-    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, KIND[q.t]),
-      h('span', { class: 'chip', style: `background:var(--${unit.color});color:#fff` }, skill.name),
+    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, q.kind || KIND[q.t]),
+      h('span', { class: 'chip', style: `--uc:var(--${unit.color});--uc2:var(--${unit.color}b);background:var(--${unit.color});color:#fff` }, skill.name),
       retry ? h('span', { class: 'chip' }, 'Second try') : null,
+      q.bell ? h('span', { class: 'chip bellchip' }, `Bell Ringer \u00b7 was \u201c${KIND[q.origType]}\u201d`) : null,
       q.src === 'pt1' ? h('span', { class: 'chip' }, `Practice Test 1 \u00b7 Q${q.tq}`) : null,
       q.missed ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, 'You missed this on the test') : null));
     if (q.tbl) wrap.append(h('div', { html: tableHTML(q.tbl) }));
@@ -732,7 +822,7 @@
     L.state = 'feedback';
     const q = L.q, first = !L.first.has(q.id);
     if (first) {
-      L.first.set(q.id, ok); grade(q, ok); S.totalAnswered++;
+      L.first.set(q.id, ok); if (q.bell) bellGrade(q, ok); else grade(q, ok); S.totalAnswered++;
       if (ok) { S.totalCorrect++; S.daily.correct++; if (MATH.has(q.s)) S.daily.math++; }
     }
     L.w.reveal(ok);
@@ -746,7 +836,8 @@
       if ([3, 5, 10, 15].includes(L.combo)) comboFlash(L.combo);
     } else {
       L.combo = 0; sfx.no();
-      if (L.mode !== 'speed') {
+      if (L.mode === 'bell') L.done++;
+      else if (L.mode !== 'speed') {
         loseHeart(); L.lostHeart = S.settings.hearts;
         if (!L.retried.has(q.id)) { L.retried.add(q.id); L.queue.push(q); } else L.done++;
       }
@@ -762,7 +853,7 @@
     }
     const foot = $('#lfoot');
     foot.className = 'lesson-foot ' + (ok ? 'ok' : 'no');
-    const willRetry = !ok && L.mode !== 'speed' && L.queue.lastIndexOf(q) > L.idx;
+    const willRetry = !ok && L.mode !== 'speed' && L.mode !== 'bell' && L.queue.lastIndexOf(q) > L.idx;
     foot.innerHTML = `
       <div class="verdict" role="status" aria-live="assertive">
         ${mascot(ok ? 'happy' : 'sad')}
@@ -771,6 +862,7 @@
           ${!ok && answer ? `<p class="ans">Correct answer: ${esc(strip(answer))}</p>` : ''}
           <p>${esc(q.e)}</p>
           ${willRetry ? '<p class="muted">You’ll see this one again at the end of the lesson.</p>' : ''}
+          ${!ok && L.mode === 'bell' ? '<p class="muted">The original question is back in \u201cFix your mistakes\u201d in 10 minutes.</p>' : ''}
         </div>
       </div>
       <div class="inner"><button class="btn ${ok ? 'good' : 'bad'}" data-act="continue" id="contbtn">Continue</button></div>`;
@@ -793,7 +885,7 @@
   function onContinue() {
     if (!L || L.state !== 'feedback') return;
     if (L.mode === 'speed' && Date.now() >= L.speedEnd) { finishLesson(); return; }
-    if (L.mode !== 'speed' && S.settings.hearts && S.hearts <= 0) { finishLesson(true); return; }
+    if (L.mode !== 'speed' && L.mode !== 'bell' && S.settings.hearts && S.hearts <= 0) { finishLesson(true); return; }
     L.idx++;
     if (L.idx >= L.queue.length) finishLesson(); else showQuestion();
   }
@@ -808,6 +900,7 @@
     const completed = !outOfHearts && answered > 0;
     let xp = L.xp + (completed ? 5 : 0) + (perfect ? 5 : 0);
     let gems = completed ? 5 + (perfect ? 5 : 0) : 0;
+    if (L.mode === 'bell') { xp = L.xp + 10 + (perfect ? 5 : 0); gems = 10 + (perfect ? 5 : 0); S.bell = { day: dayKey(), done: true, score: right, total: answered }; S.bellRuns++; S.daily.bell = 1; }
     if (L.mode === 'speed') { xp = L.speedScore * 2 + (L.speedScore >= 8 ? 5 : 0); gems = L.speedScore >= 8 ? 5 : 0; S.bestSpeed = Math.max(S.bestSpeed, L.speedScore); }
     const extended = addXP(xp);
     S.gems += gems;
@@ -822,6 +915,7 @@
     let title = 'Lesson complete!', mood = 'happy', sub = '';
     if (outOfHearts) { title = 'Out of hearts'; mood = 'sad'; sub = `Your answers were saved. Hearts refill one every 20 minutes, or you can refill them in the shop.`; }
     else if (L.mode === 'speed') { title = `Time! You scored ${L.speedScore}`; mood = L.speedScore >= 8 ? 'wow' : 'happy'; sub = S.bestSpeed === L.speedScore && L.speedScore > 0 ? 'That’s your best Speed Round yet.' : `Best so far: ${S.bestSpeed}`; }
+    else if (L.mode === 'bell') { title = perfect ? 'Perfect Bell Ringer!' : 'Bell Ringer done!'; mood = perfect ? 'wow' : 'happy'; sub = perfect ? 'Every old answer still stuck. +15 XP bonus and +15 gems.' : `${right} of ${answered} right. Anything you missed is back in \u201cFix your mistakes.\u201d`; }
     else if (perfect) { title = 'Perfect lesson!'; mood = 'wow'; sub = 'No mistakes. +5 bonus XP and +5 bonus gems.'; }
     else if (answered && acc < 60) { sub = 'The ones you missed come back in about 10 minutes, so you can try them again soon.'; }
     body.innerHTML = `<div class="done">${mascot(mood)}
@@ -860,7 +954,7 @@
     closeSheet();
     const scrim = h('div', { class: 'scrim', id: 'sheet', onclick: (e) => { if (e.target === scrim) closeSheet(); } });
     const sh = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', html });
-    if (uc) sh.style.setProperty('--uc', uc);
+    if (uc) { const [a, b] = uc.split(';--uc2:'); sh.style.setProperty('--uc', a); if (b) sh.style.setProperty('--uc2', b); }
     scrim.append(sh); document.body.append(scrim);
     const f = sh.querySelector('button.btn, button'); if (f) f.focus({ preventScroll: true });
   }
@@ -879,7 +973,7 @@
       <div class="bar good" aria-label="Skill mastery"><i style="width:${Math.round(st.pct * 100)}%"></i></div>
       <div class="tipline"><b>Tip:</b> ${esc(sk.tip)}</div>
       ${body}
-      <p class="muted" style="margin:0;font-size:14px">Questions you get right rest for 1 day, then 3, 7, 16, and 35 days. Missed questions come back after 10 minutes.</p>`, `var(--${u.color})`);
+      <p class="muted" style="margin:0;font-size:14px">Questions you get right rest for 1 day, then 3, 7, 16, and 35 days. Missed questions come back after 10 minutes.</p>`, `var(--${u.color});--uc2:var(--${u.color}b)`);
   }
   function heartsSheet() {
     const can = S.gems >= 30;
@@ -980,10 +1074,24 @@
       <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="start" data-skill="voc">Start the first lesson</button><button class="linkbtn" data-act="welcomed">Just look around</button></div></div></div>`;
   }
 
+  function bellCard() {
+    const seen = seenPool().length, done = bellToday(), wd = wordOfDay();
+    const status = done ? `<span class="bellscore">${I.check}${S.bell.score}/${S.bell.total} today</span>`
+      : seen < 3 ? '<span class="bellnote">Unlocks after you answer 3 questions.</span>'
+      : `<button class="btn small bellbtn" data-act="mode" data-mode="bell">${I.bell}Start \u00b7 ${Math.min(BELL_LEN, seen)} questions</button>`;
+    return `<section class="bellcard" aria-label="Daily Bell Ringer">
+      <div class="bell-main"><div class="eyebrow">Daily Bell Ringer</div>
+        <h2>${done ? 'Done for today. Nice ringing.' : 'Old answers, new questions'}</h2>
+        <p>${done ? 'A new set starts at midnight, built from what you\u2019ve missed and what you answered longest ago.' : 'Up to six questions you missed or answered a while ago, each rebuilt in a different style. Mistakes go back into review.'}</p>
+        ${status}</div>
+      ${wd ? `<div class="wotd"><div class="eyebrow">Word of the day</div><b>${esc(wd.w)}</b><i>${{ a: 'adjective', v: 'verb', n: 'noun' }[wd.pos]}</i><span>${esc(wd.d)}</span><small>${wd.s.replace('___', `<u>${esc(wd.w)}</u>`)}</small></div>` : ''}
+    </section>`;
+  }
+
   function nodeHTML(sk, uc, i = 0, isNext = false) {
     const st = skillStats(sk.id), r = 38, C = 2 * Math.PI * r;
     const badge = st.ready > 0 ? `<span class="badge" title="${st.ready} ready">${st.ready}</span>` : `<span class="badge clock" title="Next unlock in ${fmtDur(st.next - Date.now())}">${I.clock}</span>`;
-    return `<div class="node-row" style="--i:${i}"><button class="node ${st.ready ? '' : 'rest'} ${isNext ? 'next' : ''}" data-act="skill" data-skill="${sk.id}" style="--uc:var(--${uc})" aria-label="${esc(sk.name)}: ${st.ready} ready, ${Math.round(st.pct * 100)}% mastered">
+    return `<div class="node-row" style="--i:${i}"><button class="node ${st.ready ? '' : 'rest'} ${isNext ? 'next' : ''}" data-act="skill" data-skill="${sk.id}" style="--uc:var(--${uc});--uc2:var(--${uc}b)" aria-label="${esc(sk.name)}: ${st.ready} ready, ${Math.round(st.pct * 100)}% mastered">
       <span class="disc"><svg class="ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--surface-2)" stroke-width="5"/><circle cx="42" cy="42" r="${r}" fill="none" style="stroke:var(--hl)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - st.pct)}" transform="rotate(-90 42 42)" class="ringfill" style="--c:${C}"/></svg>${isNext ? `<span class="starttip">${S.tried.includes(sk.id) ? 'Next' : 'Start'}</span>` : ''}
       <span class="face">${esc(sk.icon)}</span>${badge}</span>
       <span class="label">${esc(sk.name)}</span></button></div>`;
@@ -991,14 +1099,14 @@
 
   function viewLearn() {
     const due = reviewPool().filter((q) => isReady(q)).length;
-    let html = welcomeCard() + noticeCard() + reminderBanner();
+    let html = welcomeCard() + noticeCard() + reminderBanner() + bellCard();
     html += `<div class="aside-hide-wide">${todayCard()}</div>`;
     if (due > 0) html += `<div class="banner" style="background:var(--surface);border-color:var(--line)">${I.redo.replace('<svg', '<svg style="color:var(--brand)"')}<span><b>${due} question${due === 1 ? ' is' : 's are'} ready for review.</b> Reviewing at the right time is how answers stick.</span><button class="btn small" data-act="mode" data-mode="review">Review</button></div>`;
     const nextSk = SK.find((s) => skillStats(s.id).ready > 0);
     let ni = 0;
     UN.forEach((u, ui) => {
       const skills = SK.filter((s) => s.unit === u.id);
-      html += `<section class="unit" style="--uc:var(--${u.color})" aria-label="${esc(u.name)}">
+      html += `<section class="unit" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(u.name)}">
         <div class="unit-head"><div><div class="eyebrow">Unit ${ui + 1} · ${ui < 5 ? 'Reading & Writing' : 'Math'}</div><h2>${esc(u.name)}</h2><p>${esc(u.blurb)}</p></div><div class="unit-num">${ui + 1}</div></div>
         <div class="path">${skills.map((s) => nodeHTML(s, u.color, ni++, nextSk && s.id === nextSk.id)).join('')}</div></section>`;
     });
@@ -1014,10 +1122,11 @@
     const nm = nextUnlock(mist), nr = nextUnlock(rv);
     return `<div><h1 style="font-size:30px">Practice</h1><p class="muted" style="margin:4px 0 0">Extra ways to earn XP. Everything here follows the same cooldowns as lessons.</p></div>
       <div class="modes">
-        ${mode('mistakes', 'var(--bad)', I.redo, 'Fix your mistakes', 'Questions you missed recently, while they’re fresh.', mr, mist.length ? `Nothing to fix yet. Next one is ready in ${fmtDur(nm - Date.now())}.` : 'No mistakes to fix yet. Nice.')}
-        ${mode('review', 'var(--brand)', I.stack, 'Mixed review', 'Questions across all skills that are due again.', rr, rv.length ? `Nothing is due. Next review unlocks in ${fmtDur(nr - Date.now())}.` : 'Answer a few questions first. Reviews unlock after a day.')}
-        ${(() => { const pp = pt1Pool(); return mode('pt1', 'var(--u3)', I.medal, 'Practice Test 1 review', `${pp.length} questions rebuilt from your PSAT practice test, starting with the one you missed.`, pp.filter((q) => isReady(q)).length, `All ${pp.length} are resting. Next one unlocks in ${fmtDur(nextUnlock(pp) - Date.now())}.`); })()}
-        ${mode('speed', 'var(--flame)', I.bolt, 'Speed round', `Answer as many as you can in ${SPEED_SECS} seconds. No hearts lost.`, QS.filter((q) => isReady(q) && ['mc', 'tf', 'cloze', 'punct', 'input'].includes(q.t)).length, 'Everything is resting. Come back later.')}
+        ${mode('mistakes', 'linear-gradient(135deg,var(--bad),var(--bad-2))', I.redo, 'Fix your mistakes', 'Questions you missed recently, while they’re fresh.', mr, mist.length ? `Nothing to fix yet. Next one is ready in ${fmtDur(nm - Date.now())}.` : 'No mistakes to fix yet. Nice.')}
+        ${mode('review', 'var(--g-brand)', I.stack, 'Mixed review', 'Questions across all skills that are due again.', rr, rv.length ? `Nothing is due. Next review unlocks in ${fmtDur(nr - Date.now())}.` : 'Answer a few questions first. Reviews unlock after a day.')}
+        ${mode('bell', 'linear-gradient(135deg,#FF8A3D,#E2418F)', I.bell, 'Daily Bell Ringer', 'Missed and older questions, rebuilt in new styles. Once a day.', bellToday() ? 0 : seenPool().length >= 3 ? Math.min(BELL_LEN, seenPool().length) : 0, bellToday() ? `Done today: ${S.bell.score}/${S.bell.total}. A new one starts at midnight.` : 'Answer at least 3 questions to unlock it.')}
+        ${(() => { const pp = pt1Pool(); return mode('pt1', 'linear-gradient(135deg,var(--u3),var(--u3b))', I.medal, 'Practice Test 1 review', `${pp.length} questions rebuilt from your PSAT practice test, starting with the one you missed.`, pp.filter((q) => isReady(q)).length, `All ${pp.length} are resting. Next one unlocks in ${fmtDur(nextUnlock(pp) - Date.now())}.`); })()}
+        ${mode('speed', 'linear-gradient(135deg,#FFB347,var(--flame),var(--flame-2))', I.bolt, 'Speed round', `Answer as many as you can in ${SPEED_SECS} seconds. No hearts lost.`, QS.filter((q) => isReady(q) && ['mc', 'tf', 'cloze', 'punct', 'input'].includes(q.t)).length, 'Everything is resting. Come back later.')}
       </div>
       <div class="card stack"><h2>Coming back soon</h2><p class="muted" style="margin:0">Questions you answer rest before you see them again. Here’s when they return.</p>
         <div class="kv"><div><b>${up.day}</b><span>Next 24 hours</span></div><div><b>${up.three}</b><span>Next 3 days</span></div><div><b>${up.week}</b><span>Next 7 days</span></div></div></div>`;
@@ -1223,5 +1332,5 @@
   rollover();
   renderView();
   tickReminder();
-  window.Inkwell = { state: () => S, questions: QS, current: () => (L && !L.ended ? L.q : null) };
+  window.Inkwell = { state: () => S, questions: QS, current: () => (L && !L.ended ? L.q : null), bellVariant: (q, seed) => bellVariant(q, seeded(String(seed))) };
 })();

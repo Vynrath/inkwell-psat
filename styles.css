@@ -578,3 +578,114 @@ body.in-lesson .toasts { bottom: auto; top: calc(64px + env(safe-area-inset-top,
 .mascot.idle { animation: breathe 3.4s ease-in-out infinite; transform-origin: 50% 100%; }
 @keyframes breathe { 50% { transform: scale(1.025, .975); } }
 .item:hover .art .mascot { animation: hop .7s var(--spring); }
+
+/* ================= gradients ================= */
+:root {
+  --u1b: #6C5CFF; --u2b: #D04FB0; --u3b: #23B27A; --u4b: #E8A21E; --u5b: #EE5C5C; --u6b: #5BB33A; --u7b: #2E8FD8;
+  --brand-2: #8B5CF6; --good-2: #2EC4A6; --bad-2: #F0782F; --hl-2: #FF9F43; --flame-2: #FF3D6E;
+  --g-brand: linear-gradient(135deg, var(--brand), var(--brand-2));
+  --g-hl: linear-gradient(90deg, var(--hl), var(--hl-2));
+  --g-good: linear-gradient(90deg, var(--good), var(--good-2));
+  --g-sunset: linear-gradient(135deg, #FF8A3D 0%, #F2497B 55%, #8B5CF6 100%);
+  --g-aurora: linear-gradient(120deg, #3049D8, #8B5CF6 45%, #E2418F);
+  --glow-a: rgba(48, 73, 216, .14); --glow-b: rgba(226, 65, 143, .11); --glow-c: rgba(35, 178, 122, .10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --brand-2: #B18CFF; --good-2: #4FE0C0; --glow-a: rgba(111, 134, 255, .2); --glow-b: rgba(226, 65, 143, .16); --glow-c: rgba(35, 178, 122, .12); }
+}
+:root[data-theme="dark"] { --brand-2: #B18CFF; --good-2: #4FE0C0; --glow-a: rgba(111, 134, 255, .2); --glow-b: rgba(226, 65, 143, .16); --glow-c: rgba(35, 178, 122, .12); }
+
+body {
+  background:
+    radial-gradient(900px 520px at 8% -8%, var(--glow-a), transparent 65%),
+    radial-gradient(800px 500px at 105% 12%, var(--glow-b), transparent 60%),
+    radial-gradient(700px 600px at 50% 115%, var(--glow-c), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+.topbar { background: transparent; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+@media (max-width: 899px) { .topbar { background: color-mix(in srgb, var(--bg) 82%, transparent); } }
+.brand span { background: var(--g-aurora); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.rail { background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 88%, var(--brand))); }
+.tab[aria-current="page"] { background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 14%, var(--surface)), color-mix(in srgb, var(--brand-2) 14%, var(--surface))); }
+
+/* buttons */
+.btn { background: linear-gradient(135deg, var(--b), var(--b2, var(--b))); --b2: var(--brand-2); }
+.btn.good { --b2: var(--good-2); }
+.btn.bad { --b2: var(--bad-2); }
+.btn.hl { --b2: var(--hl-2); }
+.btn.ghost, .btn[disabled] { --b2: var(--b); }
+
+/* bars and rings */
+.bar > i { background: var(--g-hl); }
+.bar.brand > i { background: var(--g-brand); }
+.bar.good > i, .quest.done .bar > i, .minibar i { background: var(--g-good); }
+.lesson-top .bar > i { background: linear-gradient(90deg, #FFD84A, #FF9F43 60%, #FF6B6B); }
+
+/* skill path */
+.unit-head { background: linear-gradient(135deg, var(--uc), var(--uc2, var(--uc))); box-shadow: 0 4px 0 color-mix(in srgb, var(--uc) 70%, #000), 0 10px 30px -12px var(--uc2, var(--uc)); position: relative; overflow: hidden; }
+.unit-head::after { content: ""; position: absolute; inset: -40% -10% auto auto; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.22), transparent 70%); pointer-events: none; }
+.node .face { background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--uc2, var(--uc)) 60%, #fff) 0%, var(--uc2, var(--uc)) 30%, var(--uc) 100%); }
+.node.rest .face { background: var(--surface-2); }
+.node .badge { background: var(--g-hl); }
+.sheet .icon, .mode .icon { background: linear-gradient(135deg, var(--uc, var(--brand)), var(--uc2, var(--brand-2))); }
+.chip[style*="--u"] { background: linear-gradient(135deg, var(--uc), var(--uc2)) !important; }
+
+/* cards */
+.card { background: linear-gradient(160deg, var(--surface) 60%, color-mix(in srgb, var(--surface) 92%, var(--brand-2))); }
+.hello { position: relative; overflow: hidden; }
+.aside { grid-auto-rows: max-content; }
+.hello::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--g-aurora); }
+.stile { background: linear-gradient(160deg, var(--surface), color-mix(in srgb, var(--surface) 90%, var(--brand))); }
+.ach:not(.locked) .medal { background: linear-gradient(135deg, #FFD84A, #FF9F43); }
+.item .art { background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 12%, var(--surface-2)), color-mix(in srgb, #E2418F 12%, var(--surface-2))); }
+.week .goal .dot, .heat i.goal { background: linear-gradient(135deg, var(--flame), var(--flame-2)); }
+.week .frozen .dot, .heat i.frozen { background: linear-gradient(135deg, var(--gem), #6C5CFF); }
+.stat.flame:not(.off) { background: linear-gradient(135deg, color-mix(in srgb, var(--flame) 14%, var(--surface)), var(--surface)); }
+.stat.gem { background: linear-gradient(135deg, color-mix(in srgb, var(--gem) 14%, var(--surface)), var(--surface)); }
+.stat.heart { background: linear-gradient(135deg, color-mix(in srgb, var(--heart) 12%, var(--surface)), var(--surface)); }
+.toast { background: linear-gradient(135deg, #17203A, #3A2E7A); color: #fff; }
+
+/* lesson */
+.choice[aria-pressed="true"], .tile.sel { background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 12%, var(--surface)), color-mix(in srgb, var(--brand-2) 12%, var(--surface))); }
+.choice.right, .tile.right, .tile.done { background: linear-gradient(135deg, var(--good-soft), color-mix(in srgb, var(--good-2) 18%, var(--surface))); }
+.lesson-foot.ok { background: linear-gradient(180deg, var(--good-soft), color-mix(in srgb, var(--good-2) 22%, var(--bg))); }
+.lesson-foot.no { background: linear-gradient(180deg, var(--bad-soft), color-mix(in srgb, var(--bad-2) 18%, var(--bg))); }
+.passage { border-left: 0; position: relative; padding-left: 20px; }
+.passage::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; border-radius: 12px 0 0 12px; background: linear-gradient(180deg, #FFD84A, #FF9F43, #F2497B); }
+.done h1 { background: var(--g-aurora); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.done .kv div { background: linear-gradient(160deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 85%, var(--brand-2))); }
+.bigcount { background: linear-gradient(180deg, #FFB347, var(--flame), var(--flame-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.bigcount.pop { -webkit-text-fill-color: transparent; }
+.combo { background: var(--g-sunset); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.combo svg { color: var(--flame); }
+
+/* ================= bell ringer ================= */
+.bellcard {
+  display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; padding: 20px; border-radius: var(--r-lg); color: #fff;
+  background: var(--g-sunset); box-shadow: 0 5px 0 #A8325F, 0 18px 40px -18px #E2418F; position: relative; overflow: hidden;
+}
+.bellcard::before { content: ""; position: absolute; width: 260px; height: 260px; right: -60px; top: -90px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.28), transparent 70%); }
+.bellcard .eyebrow { color: rgba(255,255,255,.85); }
+.bellcard h2 { font-size: 22px; margin: 2px 0 4px; }
+.bellcard p { margin: 0 0 12px; font-size: 15px; opacity: .95; }
+.bell-main { position: relative; }
+.bellbtn { --b: #FFFFFF; --b2: #FFF1DC; --bp: #A8325F; --t: #A0285A; }
+.bellbtn svg { width: 18px; height: 18px; }
+.bellbtn:hover:not([disabled]) svg { animation: wiggle .5s; }
+.bellscore { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; background: rgba(255,255,255,.2); border-radius: 999px; padding: 6px 12px; }
+.bellscore svg { width: 18px; height: 18px; }
+.bellnote { display: inline-block; background: rgba(0,0,0,.15); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 14px; }
+.wotd { position: relative; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.3); border-radius: 16px; padding: 12px 14px; display: grid; gap: 2px; align-content: start; backdrop-filter: blur(4px); }
+.wotd b { font-family: var(--f-display); font-size: 24px; line-height: 1.1; }
+.wotd i { font-size: 13px; opacity: .85; }
+.wotd span { font-weight: 700; }
+.wotd small { font-size: 13px; opacity: .92; line-height: 1.4; margin-top: 4px; }
+.wotd u { text-decoration-thickness: 2px; text-underline-offset: 2px; }
+@media (max-width: 640px) { .bellcard { grid-template-columns: 1fr; } }
+.bellchip { background: var(--g-sunset) !important; color: #fff !important; }
+.proposed { margin: 10px 0 8px; padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, var(--hl-soft), color-mix(in srgb, #F2497B 12%, var(--surface))); font-weight: 400; }
+.passage mark { background: linear-gradient(135deg, #FFD84A, #FFB347); color: var(--on-hl); padding: 0 4px; border-radius: 4px; font-weight: 700; }
+@media (max-width: 899px) {
+  .topbar { margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding-inline: max(16px, env(safe-area-inset-left, 0px)); }
+}
