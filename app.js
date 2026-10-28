@@ -729,7 +729,8 @@
       if (!sel || sel.side === side) { if (sel) sel.el.classList.remove('sel'); sel = { el, side, i }; el.classList.add('sel'); sfx.tap(); return; }
       const a = sel; sel = null; a.el.classList.remove('sel');
       if (a.i === i) {
-        a.el.classList.add('done'); el.classList.add('done'); matched++; tone([700 + matched * 60], 'sine', 0.08, 0, 0.04);
+        matched++; const k = matched;
+        [a.el, el].forEach((x) => { x.classList.add('done', 'paired'); x.style.setProperty('--pc', `var(--pair-${(k - 1) % 6 + 1})`); x.prepend(h('span', { class: 'pairno', 'aria-hidden': 'true' }, String(k))); x.setAttribute('aria-label', `${x.textContent.slice(String(k).length)} — pair ${k}`); }); tone([700 + matched * 60], 'sine', 0.08, 0, 0.04);
         if (matched === n) setTimeout(() => ctx.auto(mistakes === 0, q.pairs.map((p) => `${p[0]} → ${p[1]}`).join('; ')), 350);
       } else {
         mistakes++; sfx.no();
