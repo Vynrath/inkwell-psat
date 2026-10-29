@@ -1,5 +1,5 @@
 /* Offline cache for Inkwell. Bump VERSION whenever you change a file so phones pick up the update. */
-const VERSION = 'inkwell-v9';
+const VERSION = 'inkwell-v10';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'fx.js', 'questions.js', 'questions-pt1.js', 'questions-more.js', 'questions-genres.js', 'questions-extra.js', 'vocab.js', 'icon.svg', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {

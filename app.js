@@ -10,6 +10,11 @@
   const MIN = 60e3, HOUR = 36e5, DAY = 864e5;
   // Cooldowns after an answer. Box 0 = answered wrong (back soon); each correct answer moves it up a box.
   const INTERVALS = [10 * MIN, 1 * DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY];
+  /* Mastery: right MAST_BOX times in a row, each spaced out (same day, then 1, 3 and 7 days later),
+     with at least 75% accuracy overall. One wrong answer resets the run. */
+  const MAST_BOX = 4, MAST_ACC = 0.75;
+  const isMast = (r) => !!r && r.box >= MAST_BOX && r.c / (r.c + r.w) >= MAST_ACC;
+  const mastPts = (r) => (!r ? 0 : isMast(r) ? MAST_BOX : Math.min(r.box, MAST_BOX - 1));
   const HEART_MS = 20 * MIN, MAX_HEARTS = 5, LESSON_LEN = 8, REVIEW_LEN = 10, SPEED_SECS = 60;
   const KEY = 'inkwell.v1';
 
@@ -27,7 +32,7 @@
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
     settings: { goal: 20, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
-    chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
+    learned: [], learnedInit: false, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
   function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
@@ -132,11 +137,11 @@
   /* ---------------------------------------------------------------- mascot */
   const HATS = {
     none: { name: 'No outfit', price: 0, desc: 'Dot, as is.' },
-    scarf: { name: 'Cozy Scarf', price: 40, desc: 'For long winter study nights.' },
-    phones: { name: 'Headphones', price: 80, desc: 'Lo-fi beats to study to.' },
-    party: { name: 'Party Hat', price: 60, desc: 'Every streak is a party.' },
-    grad: { name: 'Grad Cap', price: 120, desc: 'Dress for the score you want.' },
-    crown: { name: 'Crown', price: 220, desc: 'Royalty of the reading section.' },
+    scarf: { name: 'Cozy Scarf', price: 150, desc: 'For long winter study nights.' },
+    phones: { name: 'Headphones', price: 400, desc: 'Lo-fi beats to study to.' },
+    party: { name: 'Party Hat', price: 250, desc: 'Every streak is a party.' },
+    grad: { name: 'Grad Cap', price: 600, desc: 'Dress for the score you want.' },
+    crown: { name: 'Crown', price: 1000, desc: 'Royalty of the reading section.' },
   };
   function hatSVG(hat) {
     switch (hat) {
@@ -179,6 +184,18 @@
 
   /* -------------------------------------------------------------- state ops */
   let S = load();
+  /* Vocabulary you've been taught. Words you'd already answered before this existed count as learned. */
+  function wordsOf(q) {
+    if (q.vw) return [q.vw];
+    if (q.t === 'match' && q.id.startsWith('vw-')) return q.pairs.map((p) => p[0]);
+    return [];
+  }
+  const isLearned = (w) => S.learned.includes(w);
+  if (!S.learnedInit) {
+    const set = new Set(S.learned);
+    for (const q of QS) if (S.q[q.id]) wordsOf(q).forEach((w) => set.add(w));
+    S.learned = [...set]; S.learnedInit = true;
+  }
 
   function syncHearts() {
     if (S.hearts >= MAX_HEARTS) { S.hearts = MAX_HEARTS; S.heartsAt = Date.now(); return; }
@@ -253,14 +270,26 @@
     for (const q of qs) {
       const r = S.q[q.id];
       if (!r || r.due <= now) ready++; else next = Math.min(next, r.due);
-      if (r) { seen++; c += r.c; w += r.w; pts += Math.min(r.box, 3); if (r.box >= 3) mast++; }
+      if (r) { seen++; c += r.c; w += r.w; pts += mastPts(r); if (isMast(r)) mast++; }
     }
-    return { total: qs.length, ready, seen, mast, pct: pts / (3 * qs.length), acc: c + w ? c / (c + w) : null, next };
+    return { total: qs.length, ready, seen, mast, pct: pts / (MAST_BOX * qs.length), acc: c + w ? c / (c + w) : null, next };
   }
   const mistakesPool = () => QS.filter((q) => { const r = S.q[q.id]; return r && r.w > 0 && r.box <= 1; });
   const reviewPool = () => QS.filter((q) => S.q[q.id]);
   const pt1Pool = () => QS.filter((q) => q.src === 'pt1');
   const unitPool = (uid) => QS.filter((q) => SKMAP[q.s] && SKMAP[q.s].unit === uid);
+  /* At most NEW_WORDS unlearned vocab words per lesson, so the "learn first" part stays short. */
+  const NEW_WORDS = 4;
+  function capNew(list, n) {
+    const fresh = new Set(), out = [];
+    for (const q of list) {
+      if (out.length >= n) break;
+      const nw = wordsOf(q).filter((w) => !isLearned(w) && !fresh.has(w));
+      if (fresh.size + nw.length > NEW_WORDS) continue;
+      nw.forEach((w) => fresh.add(w)); out.push(q);
+    }
+    return out;
+  }
   function buildQueue(mode, sid) {
     const now = Date.now();
     let pool = mode === 'unit' ? unitPool(sid) : mode === 'skill' ? QS.filter((q) => q.s === sid) : mode === 'mistakes' ? mistakesPool() : mode === 'review' ? reviewPool() : mode === 'pt1' ? pt1Pool() : QS.slice();
@@ -269,18 +298,18 @@
     const wrong = shuffle(av.filter((q) => S.q[q.id] && S.q[q.id].box === 0));
     const fresh = shuffle(av.filter((q) => !S.q[q.id]));
     const due = av.filter((q) => S.q[q.id] && S.q[q.id].box > 0).sort((a, b) => S.q[a.id].due - S.q[b.id].due);
-    if (mode === 'speed') return shuffle(av);
-    if (mode === 'review' || mode === 'mistakes') return [...wrong, ...due].slice(0, REVIEW_LEN);
+    if (mode === 'speed') return shuffle(av.filter((q) => wordsOf(q).every(isLearned)));
+    if (mode === 'review' || mode === 'mistakes') return capNew([...wrong, ...due], REVIEW_LEN);
     if (mode === 'unit') {
       // Unit review: mistakes first, then test-style questions, then a shuffled mix across the unit's skills.
       const pt = fresh.filter((q) => q.src === 'pt1'), rest = fresh.filter((q) => q.src !== 'pt1');
       const bySkill = {}; for (const q of rest) (bySkill[q.s] = bySkill[q.s] || []).push(q);
       const mixed = []; const lists = Object.values(bySkill);
       for (let i = 0; mixed.length < rest.length; i++) for (const l of lists) if (l[i]) mixed.push(l[i]);
-      return [...wrong, ...pt.slice(0, 3), ...due.slice(0, 3), ...mixed, ...pt.slice(3), ...due.slice(3)].slice(0, REVIEW_LEN);
+      return capNew([...wrong, ...pt.slice(0, 3), ...due.slice(0, 3), ...mixed, ...pt.slice(3), ...due.slice(3)], REVIEW_LEN);
     }
-    if (mode === 'pt1') { const missed = fresh.filter((q) => q.missed); return [...wrong, ...missed, ...fresh.filter((q) => !q.missed), ...due].slice(0, REVIEW_LEN); }
-    return [...wrong, ...fresh, ...due].slice(0, LESSON_LEN);
+    if (mode === 'pt1') { const missed = fresh.filter((q) => q.missed); return capNew([...wrong, ...missed, ...fresh.filter((q) => !q.missed), ...due], REVIEW_LEN); }
+    return capNew([...wrong, ...fresh, ...due], LESSON_LEN);
   }
   function nextUnlock(pool) {
     const now = Date.now(); let m = Infinity;
@@ -363,9 +392,9 @@
   const VOCAB_SK = new Set(['voc', 'wic', 'vta', 'vae', 'vas']);
   const GENRE_SK = ['lit', 'soc', 'hum', 'nat'];
   const correctIn = (pred) => { let n = 0; for (const q of QS) if (pred(q)) { const r = S.q[q.id]; if (r) n += r.c; } return n; };
-  const mastQ = () => { let n = 0; for (const k in S.q) if (S.q[k].box >= 3) n++; return n; };
+  const mastQ = () => { let n = 0; for (const k in S.q) if (isMast(S.q[k])) n++; return n; };
   const fullSkills = () => SK.filter((s) => { const st = skillStats(s.id); return st.total && st.mast === st.total; }).length;
-  const fullUnit = () => (UN.some((u) => { const p = unitPool(u.id); return p.length && p.every((q) => S.q[q.id] && S.q[q.id].box >= 3); }) ? 1 : 0);
+  const fullUnit = () => (UN.some((u) => { const p = unitPool(u.id); return p.length && p.every((q) => isMast(S.q[q.id])); }) ? 1 : 0);
   const B = (cat, id, tier, icon, name, desc, val, goal) => ({ cat, id, tier, icon, name, desc, val, goal });
   const BADGE_CATS = [['streak', 'Streaks'], ['xp', 'Experience'], ['lessons', 'Lessons'], ['skill', 'Skill & accuracy'], ['journey', 'Journey & exploration'], ['subject', 'Subjects'], ['bell', 'Bell Ringer & speed'], ['fun', 'Just for fun']];
   const ACH = [
@@ -882,13 +911,38 @@
   const PRAISE = ['Nice!', 'Correct!', 'You got it.', 'Sharp reading.', 'Exactly right.', 'Great work!', 'Nailed it.'];
   const OOPS = ['Not quite.', 'Almost.', 'Close, but not it.', 'Good try.'];
 
+  /* New vocab: first a card for each word (meaning + example), then a quick check on each, then the lesson. */
+  function learnPhase(queue) {
+    const words = [...new Set(queue.flatMap(wordsOf))].filter((w) => !isLearned(w)).map(vocabWord).filter(Boolean);
+    if (!words.length) return [];
+    const teach = words.map((it, k) => ({ id: 'teach-' + it.w, t: 'teach', learn: true, s: it.sid, vw: it.w, n: k + 1, of: words.length }));
+    const checks = shuffle(words).map((it) => {
+      const others = shuffle((window.INK_WORDS || []).filter((x) => x.pos === it.pos && x.w !== it.w));
+      const opts = [...others.filter((x) => words.includes(x)), ...others.filter((x) => !words.includes(x))].slice(0, 3);
+      return { id: 'learncheck-' + it.w, t: 'mc', learn: true, s: it.sid, vw: it.w, kind: 'Quick check',
+        q: `Which word means \u201c${it.d}\u201d?`, c: [it.w, ...opts.map((x) => x.w)], a: 0,
+        e: `${it.w[0].toUpperCase() + it.w.slice(1)} means ${it.d}. ${it.s.replace('___', it.w)}` };
+    });
+    return [...teach, ...checks];
+  }
+  function teachCard(q) {
+    const it = vocabWord(q.vw), pos = { a: 'adjective', v: 'verb', n: 'noun' }[it.pos];
+    return h('div', { class: 'teach', html: `
+      <div class="teach-word">${esc(it.w)}<span class="teach-pos">${pos}</span></div>
+      <div class="teach-def"><span class="lbl">Means</span>${esc(it.d)}</div>
+      <div class="passage">${esc(it.s).replace('___', `<b>${esc(it.w)}</b>`)}</div>
+      <p class="muted teach-note">New word ${q.n} of ${q.of}. You'll get a quick check on each new word, then the lesson starts.</p>` });
+  }
+
   function startLesson(mode, sid) {
     closeSheet();
     syncHearts();
     if (mode !== 'speed' && mode !== 'bell' && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
-    const queue = mode === 'bell' ? (bellToday() ? [] : buildBell()) : buildQueue(mode, sid);
+    let queue = mode === 'bell' ? (bellToday() ? [] : buildBell()) : buildQueue(mode, sid);
+    let learnEnd = 0;
+    if (mode !== 'bell' && mode !== 'speed' && queue.length) { const pre = learnPhase(queue); learnEnd = pre.length; queue = [...pre, ...queue]; }
     if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
-    L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false };
+    L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false, learnEnd };
     if (mode === 'speed') L.speedEnd = Date.now() + SPEED_SECS * 1000;
     if (mode === 'skill' && !S.tried.includes(sid)) S.tried.push(sid);
     if (mode === 'unit') L.unit = sid;
@@ -934,9 +988,10 @@
     const skill = SKMAP[q.s], unit = UNMAP[skill.unit];
     const wrap = h('div', { class: 'qwrap' });
     const retry = L.retried.has(q.id) && L.first.has(q.id);
-    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, q.kind || KIND[q.t]),
+    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, q.t === 'teach' ? 'Learn it' : q.kind || KIND[q.t]),
       h('span', { class: 'chip', style: `--uc:var(--${unit.color});--uc2:var(--${unit.color}b);background:var(--${unit.color});color:#fff` }, skill.name),
       retry ? h('span', { class: 'chip' }, 'Second try') : null,
+      q.learn ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, 'New word') : null,
       q.bell ? h('span', { class: 'chip bellchip' }, `Bell Ringer \u00b7 was \u201c${KIND[q.origType]}\u201d`) : null,
       q.src === 'pt1' ? h('span', { class: 'chip' }, `Practice Test 1 \u00b7 Q${q.tq}`) : null,
       q.missed ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, 'You missed this on the test') : null));
@@ -957,6 +1012,18 @@
       submit: () => onCheck(),
       auto: (ok, answer) => resolve(ok, answer),
     };
+    if (q.t === 'teach') {
+      wrap.append(teachCard(q));
+      const old0 = body.querySelector('.qwrap');
+      if (old0 && !calm()) { old0.classList.add('qout'); setTimeout(() => { if (L && L.q === q) { body.replaceChildren(wrap); body.scrollTop = 0; } }, 150); }
+      else { body.replaceChildren(wrap); body.scrollTop = 0; }
+      L.state = 'feedback'; L.w = null;
+      foot.className = 'lesson-foot';
+      foot.innerHTML = `<div class="inner"><button class="btn" data-act="continue" id="contbtn">Got it</button></div>`;
+      setTimeout(() => { const c = $('#contbtn'); if (c) c.focus({ preventScroll: true }); }, 30);
+      updateLessonTop();
+      return;
+    }
     const W = { mc: wMC, tf: wTF, cloze: wCloze, punct: wPunct, input: wInput, tap: wTap, match: wMatch, sort: wSort, order: wOrder }[q.t];
     L.w = W(q, ctx, passageEl);
     wrap.append(L.w.el);
@@ -981,7 +1048,9 @@
     if (!L || L.state !== 'answer') return;
     if (L.mode === 'speed' && Date.now() > L.speedEnd) { finishLesson(); return; }
     L.state = 'feedback';
-    const q = L.q, first = !L.first.has(q.id);
+    const q = L.q;
+    if (q.learn) { resolveLearn(q, ok, answer); return; }
+    const first = !L.first.has(q.id);
     if (first) {
       L.first.set(q.id, ok); if (q.bell) bellGrade(q, ok); else grade(q, ok); S.totalAnswered++;
       if (ok) { S.totalCorrect++; S.daily.correct++; if (MATH.has(q.s)) S.daily.math++; }
@@ -1031,6 +1100,27 @@
     setTimeout(() => { const c = $('#contbtn'); if (c) c.focus({ preventScroll: true }); }, 30);
   }
 
+  function resolveLearn(q, ok, answer) {
+    L.w.reveal(ok);
+    if (ok) { L.done++; sfx.ok(); if (!isLearned(q.vw)) S.learned.push(q.vw); save(); }
+    else { sfx.no(); L.queue.splice(L.learnEnd, 0, q); L.learnEnd++; }
+    updateLessonTop();
+    const foot = $('#lfoot');
+    foot.className = 'lesson-foot ' + (ok ? 'ok' : 'no');
+    foot.innerHTML = `
+      <div class="verdict" role="status" aria-live="assertive">
+        ${mascot(ok ? 'happy' : 'sad')}
+        <div>
+          <h3>${ok ? pick(PRAISE) : pick(OOPS)}</h3>
+          ${!ok && answer ? `<p class="ans">Correct answer: ${esc(strip(answer))}</p>` : ''}
+          <p>${esc(q.e)}</p>
+          ${ok ? '' : '<p class="muted">This was just a practice check, so no heart lost. You\u2019ll try it again before the lesson starts.</p>'}
+        </div>
+      </div>
+      <div class="inner"><button class="btn ${ok ? 'good' : 'bad'}" data-act="continue" id="contbtn">Continue</button></div>`;
+    setTimeout(() => { const c = $('#contbtn'); if (c) c.focus({ preventScroll: true }); }, 30);
+  }
+
   function xpFloat(text) {
     if (calm()) return;
     const b = $('#checkbtn') || $('#lfoot .inner'); if (!b) return;
@@ -1048,6 +1138,7 @@
     if (!L || L.state !== 'feedback') return;
     if (L.mode === 'speed' && Date.now() >= L.speedEnd) { finishLesson(); return; }
     if (L.mode !== 'speed' && L.mode !== 'bell' && S.settings.hearts && S.hearts <= 0) { finishLesson(true); return; }
+    if (L.q && L.q.t === 'teach') L.done++;
     L.idx++;
     if (L.idx >= L.queue.length) finishLesson(); else showQuestion();
   }
@@ -1147,7 +1238,7 @@
     const ready = pool.filter((q) => isReady(q, now)).length;
     const mist = pool.filter((q) => { const r = S.q[q.id]; return r && r.w > 0 && r.box <= 1 && r.due <= now; }).length;
     const pt = pool.filter((q) => q.src === 'pt1');
-    const mast = pool.filter((q) => S.q[q.id] && S.q[q.id].box >= 3).length;
+    const mast = pool.filter((q) => isMast(S.q[q.id])).length;
     return { total: pool.length, ready, mist, pt: pt.length, ptReady: pt.filter((q) => isReady(q, now)).length, mast, next: nextUnlock(pool) };
   }
   function unitSheet(uid) {
@@ -1337,7 +1428,7 @@
   const CHEST_GEMS = 30;
   const chestNeed = (uid) => Math.min(15, unitPool(uid).length);
   const unitSeen = (uid) => unitPool(uid).filter((q) => S.q[q.id]).length;
-  const unitPct = (uid) => { const p = unitPool(uid); if (!p.length) return 0; let pts = 0; for (const q of p) { const r = S.q[q.id]; if (r) pts += Math.min(r.box, 3); } return Math.round((pts / (3 * p.length)) * 100); };
+  const unitPct = (uid) => { const p = unitPool(uid); if (!p.length) return 0; let pts = 0; for (const q of p) { const r = S.q[q.id]; pts += mastPts(r); } return Math.round((pts / (MAST_BOX * p.length)) * 100); };
   const chestSVG = (open) => `<svg class="chestsvg" viewBox="0 0 48 46" aria-hidden="true">${open ? '<circle cx="24" cy="18" r="13" fill="#FFE27A" opacity=".55"/><path d="M16 20l4-6 4 6-4 4zM26 18l4-5 4 5-4 4z" fill="#7EE8FA"/><path d="M21 17l3-4 3 4-3 3z" fill="#FF6B8B"/>' : ''}
     <path d="M6 22h36v19a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3z" fill="#B5652B"/><path d="M6 26h36" stroke="#8E4A1F" stroke-width="1.5" opacity=".6"/><path d="M14 22v22M34 22v22" stroke="#FFD84A" stroke-width="3"/>
     <g class="lid" ${open ? 'transform="translate(0 -9) rotate(-18 6 22)"' : ''}><path d="M6 22a10 10 0 0 1 10-10h16a10 10 0 0 1 10 10z" fill="#D2803A"/><path d="M14 13.5V22M34 13.5V22" stroke="#FFD84A" stroke-width="3"/><path d="M6 20.5h36V24H6z" fill="#FFD84A"/></g>
@@ -1405,8 +1496,8 @@
     const wave = (k) => Math.round(Math.sin(k * 0.82 + 0.4) * 62);
     let ni = 0, gi = 0;
     const opened = UN.filter((u) => S.chests[u.id]).length;
-    let allPts = 0; for (const q of QS) { const r = S.q[q.id]; if (r) allPts += Math.min(r.box, 3); }
-    const total = Math.round((allPts / (3 * QS.length)) * 100);
+    let allPts = 0; for (const q of QS) { const r = S.q[q.id]; allPts += mastPts(r); }
+    const total = Math.round((allPts / (MAST_BOX * QS.length)) * 100);
     html += `<section class="journey" id="journey" aria-label="Your study journey"><svg class="trail" aria-hidden="true"></svg>
       <div class="trailhead"><span class="thicon">${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + BI.map + '</svg>'}</span><span><b>Trailhead</b><small>Your PSAT journey starts here</small></span></div>`;
     UN.forEach((u, ui) => {
@@ -1469,7 +1560,7 @@
       </div>
       <div class="card stack"><h2>Last 5 weeks</h2><div class="heat" aria-label="Streak calendar">${heat}</div>
         <div class="legend"><span style="--c:var(--flame)">Goal met</span><span style="--c:var(--gem)">Freeze used</span><span style="--c:var(--surface-2)">Missed</span></div></div>
-      <div class="card stack"><h2>Skills</h2><p class="muted" style="margin:0;font-size:14px">A question counts as mastered after you get it right three times in a row, spaced out over days.</p>
+      <div class="card stack"><h2>Skills</h2><p class="muted" style="margin:0;font-size:14px">A question counts as mastered after you get it right four times in a row, spaced out over more than a week (same day, then 1, 3, and 7 days later), with at least 75% accuracy on it overall. One miss starts the run over.</p>
         <div class="tablewrap"><table class="data"><thead><tr><th>Skill</th><th class="num">Seen</th><th>Mastery</th><th class="num">Accuracy</th><th class="num">Ready</th></tr></thead><tbody>${rows}</tbody></table></div></div>
       ${badgesCard()}`;
   }
