@@ -32,7 +32,7 @@
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
     settings: { goal: 20, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
-    learned: [], learnedInit: false, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
+    learned: [], learnedInit: false, vocabReset: 0, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
   function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
@@ -196,6 +196,13 @@
     for (const q of QS) if (S.q[q.id]) wordsOf(q).forEach((w) => set.add(w));
     S.learned = [...set]; S.learnedInit = true;
   }
+  /* Relearn vocab: forget which words were taught and their question history, so each word comes back
+     as a fresh "Learn it" card, then a quick check, then lesson questions. */
+  function resetVocab() {
+    S.learned = [];
+    for (const k of Object.keys(S.q)) if (k.startsWith('vw-')) delete S.q[k];
+  }
+  if (S.vocabReset < 1) { resetVocab(); S.vocabReset = 1; save(); }
 
   function syncHearts() {
     if (S.hearts >= MAX_HEARTS) { S.hearts = MAX_HEARTS; S.heartsAt = Date.now(); return; }
@@ -1622,6 +1629,7 @@
         <div class="field"><span class="hint">Progress is saved in this browser only. To move it to another device, copy a backup code here and paste it there.</span>
           <div class="row" style="flex-wrap:wrap"><button class="btn small ghost" data-act="export">Copy backup code</button><button class="btn small ghost" data-act="import">Restore from code</button></div>
           <textarea id="backup" aria-label="Backup code" placeholder="Backup code appears here, or paste one to restore"></textarea></div>
+        <div class="field"><span class="lbl">Relearn vocab</span><span class="hint">Every vocab word gets taught again from its \u201cLearn it\u201d card. Clears your vocab question history only; XP, gems, and badges stay.</span><div id="relearnbox"><button class="btn small" data-act="relearn1">Relearn all words</button></div></div>
         <div class="field"><span class="lbl">Start over</span><span class="hint">Erases all XP, streaks, gems, and question history in this browser.</span><div id="resetbox"><button class="btn small bad" data-act="reset1">Reset progress</button></div></div>
       </div>
       <p class="muted" style="font-size:13px">Inkwell is an independent study tool with original practice questions. It isn’t affiliated with the College Board.</p>`;
@@ -1717,6 +1725,9 @@
       }
       case 'reset1': $('#resetbox').innerHTML = '<div class="row" style="flex-wrap:wrap"><span style="font-weight:700">Erase everything?</span><button class="btn small bad" data-act="reset2">Yes, erase</button><button class="btn small ghost" data-act="reset0">Cancel</button></div>'; break;
       case 'reset0': renderView(); break;
+      case 'relearn1': $('#relearnbox').innerHTML = '<div class="row" style="flex-wrap:wrap"><span style="font-weight:700">Relearn every word?</span><button class="btn small" data-act="relearn2">Yes, relearn</button><button class="btn small ghost" data-act="relearn0">Cancel</button></div>'; break;
+      case 'relearn0': $('#relearnbox').innerHTML = '<button class="btn small" data-act="relearn1">Relearn all words</button>'; break;
+      case 'relearn2': resetVocab(); save(); renderView(); toast('Vocab reset. New words will be taught first.'); break;
       case 'reset2': S = defaults(); save(); applyTheme(); location.hash = 'learn'; renderView(); toast('Progress erased. Fresh start!'); break;
       default: break;
     }
