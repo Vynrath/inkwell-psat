@@ -30,7 +30,7 @@
     streak: 0, best: 0, lastGoalDay: null, freezes: 1, days: {},
     daily: freshDaily(), q: {}, ach: {}, owned: ['none'], hat: 'none',
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
-    settings: { goal: 20, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
+    settings: { goal: 60, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
     learned: [], learnedInit: false, vocabReset: 0, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
@@ -47,7 +47,11 @@
     try {
       let raw = null;
       try { raw = localStorage.getItem(KEY); } catch (e) { raw = memCopy; }
-      if (raw) return merge(defaults(), JSON.parse(raw));
+      if (raw) {
+        const o = JSON.parse(raw);
+        if (!o.goalX3) { if (o.settings && o.settings.goal) o.settings.goal *= 3; o.goalX3 = true; } // daily goals were tripled
+        return merge(defaults(), o);
+      }
     } catch (e) { /* corrupted: start fresh */ }
     return defaults();
   }
@@ -836,6 +840,44 @@
   const bellToday = () => S.bell && S.bell.day === dayKey() && S.bell.done;
   const seenPool = () => QS.filter((q) => S.q[q.id]);
   const vocabWord = (w) => (window.INK_WORDS || []).find((x) => x.w === w);
+  /* Vocab variations: every time a vocab question is shown it's rebuilt with different wording,
+     a different question style, and freshly picked wrong answers (including close "trap" meanings). */
+  const rnd1 = (a) => a[Math.floor(Math.random() * a.length)];
+  const capW = (t) => t[0].toUpperCase() + t.slice(1);
+  function vInfo(w) {
+    const it = vocabWord(w); if (!it) return null;
+    const v = (window.INK_VOCAB_VARIANTS || {})[w] || [[], [], [], null];
+    return { ...it, alts: [it.d, ...v[0]], syn: v[1], traps: v[2], sents: v[3] ? [it.s, v[3]] : [it.s] };
+  }
+  const nearW = (a, b) => a === b || (window.INK_VOCAB_CLUSTERS || []).some((c) => c.includes(a) && c.includes(b));
+  const otherWords = (it, n) => shuffle((window.INK_WORDS || []).filter((x) => x.pos === it.pos && !nearW(x.w, it.w))).slice(0, n);
+  const vExplain = (it) => `${capW(it.w)} means ${it.d}${it.syn.length ? ` (similar words: ${it.syn.join(', ')})` : ''}.`;
+  function vary(q0) {
+    const q = q0.base || q0;
+    if (q.learn || q.bell) return q0;
+    if (q.t === 'match' && q.id.startsWith('vw-')) return { ...q, base: q, pairs: q.pairs.map(([w, d]) => { const it = vInfo(w); return [w, it ? rnd1(it.alts) : d]; }) };
+    if (!q.vw) return q0;
+    const it = vInfo(q.vw); if (!it) return q0;
+    const expl = vExplain(it);
+    if (q.t === 'cloze') {
+      return { ...q, base: q, p: rnd1(it.sents), c: [it.w, ...otherWords(it, 3).map((x) => x.w)], a: 0, e: `${expl} That is what the clues in the sentence point to.` };
+    }
+    const meaning = rnd1(it.alts), pos = { a: 'adjective', v: 'verb', n: 'noun' }[it.pos], r = Math.random();
+    if (r < 0.4) {
+      // 1–2 close-but-wrong traps plus other words' meanings, reworded too
+      const traps = shuffle(it.traps).slice(0, Math.random() < 0.5 ? 1 : 2);
+      const rest = otherWords(it, 3 - traps.length).map((x) => rnd1(vInfo(x.w).alts));
+      return { ...q, base: q, kind: 'Choose the meaning', q: `What does <b>${it.w}</b> (${pos}) most nearly mean?`, c: [meaning, ...traps, ...rest], a: 0, e: expl };
+    }
+    if (r < 0.6) return { ...q, base: q, kind: 'Find the word', q: `Which word means \u201c${meaning}\u201d?`, c: [it.w, ...otherWords(it, 3).map((x) => x.w)], a: 0, e: expl };
+    if (r < 0.8 && it.syn.length) {
+      const wrong = otherWords(it, 3).map((x) => { const o = vInfo(x.w); return o.syn.length ? rnd1(o.syn) : rnd1(o.alts); });
+      return { ...q, base: q, kind: 'Closest synonym', q: `Which word is closest in meaning to <b>${it.w}</b>?`, c: [rnd1(it.syn), ...wrong], a: 0, e: expl };
+    }
+    const right = Math.random() < 0.45, shown = right ? meaning : (it.traps.length ? rnd1(it.traps) : rnd1(vInfo(otherWords(it, 1)[0].w).alts));
+    return { ...q, base: q, t: 'tf', kind: 'Yes or no', labels: ['Yes', 'No'], q: `Does <b>${it.w}</b> mean \u201c${shown}\u201d?`, a: right,
+      e: right ? `Yes. ${expl}` : `No, that\u2019s a close-sounding trap. ${expl}` };
+  }
   function bellVariant(q, r) {
     const pickOne = (arr) => arr[Math.floor(r() * arr.length)];
     const base = { id: 'bell-' + q.id, s: q.s, orig: q.id, origType: q.t, bell: true, tbl: q.tbl, bars: q.bars, graph: q.graph, src: q.src, tq: q.tq };
@@ -844,8 +886,10 @@
     if (q.vw && (q.t === 'mc' || q.t === 'cloze')) {
       const me = vocabWord(q.vw), pool = (window.INK_WORDS || []).filter((x) => x.pos === me.pos && x.w !== me.w);
       const opts = shuffle(pool).slice(0, 3);
-      if (q.t === 'mc') return { ...base, t: 'mc', kind: 'Reverse it', q: `Which word means \u201c${me.d}\u201d?`, c: [me.w, ...opts.map((x) => x.w)], a: 0, e: `${me.w} means ${me.d}.` };
-      return { ...base, t: 'mc', kind: 'Meaning in context', p: me.s.replace('___', `<b>${me.w}</b>`), q: `As used here, what does <b>${me.w}</b> most nearly mean?`, c: [me.d, ...opts.map((x) => x.d)], a: 0, e: `${me.w} means ${me.d}.` };
+      const vi = vInfo(me.w), md = rnd1(vi.alts), expl = vExplain(vi);
+      if (q.t === 'mc') return { ...base, t: 'mc', kind: 'Reverse it', q: `Which word means \u201c${md}\u201d?`, c: [me.w, ...opts.map((x) => x.w)], a: 0, e: expl };
+      const wrongD = [...shuffle(vi.traps).slice(0, 1), ...opts.map((x) => rnd1(vInfo(x.w).alts))].slice(0, 3);
+      return { ...base, t: 'mc', kind: 'Meaning in context', p: rnd1(vi.sents).replace('___', `<b>${me.w}</b>`), q: `As used here, what does <b>${me.w}</b> most nearly mean?`, c: [md, ...wrongD], a: 0, e: expl };
     }
     switch (q.t) {
       case 'mc': {
@@ -927,7 +971,7 @@
       const others = shuffle((window.INK_WORDS || []).filter((x) => x.pos === it.pos && x.w !== it.w));
       const opts = [...others.filter((x) => words.includes(x)), ...others.filter((x) => !words.includes(x))].slice(0, 3);
       return { id: 'learncheck-' + it.w, t: 'mc', learn: true, s: it.sid, vw: it.w, kind: 'Quick check',
-        q: `Which word means \u201c${it.d}\u201d?`, c: [it.w, ...opts.map((x) => x.w)], a: 0,
+        q: `Which word means \u201c${rnd1(vInfo(it.w).alts)}\u201d?`, c: [it.w, ...opts.map((x) => x.w)], a: 0,
         e: `${it.w[0].toUpperCase() + it.w.slice(1)} means ${it.d}. ${it.s.replace('___', it.w)}` };
     });
     return [...teach, ...checks];
@@ -937,6 +981,7 @@
     return h('div', { class: 'teach', html: `
       <div class="teach-word">${esc(it.w)}<span class="teach-pos">${pos}</span></div>
       <div class="teach-def"><span class="lbl">Means</span>${esc(it.d)}</div>
+      ${(() => { const v = vInfo(it.w); return (v.alts.length > 1 ? `<div class="teach-alt"><span class="lbl">Also put as</span>${v.alts.slice(1).map(esc).join(' \u00b7 ')}</div>` : '') + (v.syn.length ? `<div class="teach-alt"><span class="lbl">Similar words</span>${v.syn.map(esc).join(', ')}</div>` : ''); })()}
       <div class="passage">${esc(it.s).replace('___', `<b>${esc(it.w)}</b>`)}</div>
       <p class="muted teach-note">New word ${q.n} of ${q.of}. You'll get a quick check on each new word, then the lesson starts.</p>` });
   }
@@ -990,7 +1035,7 @@
   }
 
   function showQuestion() {
-    const q = L.queue[L.idx], body = $('#lbody'), foot = $('#lfoot');
+    const q = vary(L.queue[L.idx]), body = $('#lbody'), foot = $('#lfoot');
     L.state = 'answer'; L.q = q;
     const skill = SKMAP[q.s], unit = UNMAP[skill.unit];
     const wrap = h('div', { class: 'qwrap' });
@@ -1377,7 +1422,7 @@
     if (S.welcomed) return '';
     return `<div class="card hello">${mascot('wow', S.hat, 'mascot idle')}<div><div class="eyebrow">Welcome to Inkwell</div><h2>Hi, I’m Dot. Let’s get you PSAT-ready.</h2>
       <p class="muted" style="margin:4px 0 0">Short lessons, every question type on the test, and questions you’ve answered rest for a while before they come back. Pick a daily goal:</p>
-      <div class="goalpick">${[[10, 'Casual'], [20, 'Regular'], [30, 'Serious'], [50, 'Intense']].map(([g, n]) => `<button data-act="goal" data-goal="${g}" aria-pressed="${S.settings.goal === g}">${n} · ${g} XP</button>`).join('')}</div>
+      <div class="goalpick">${[[30, 'Casual'], [60, 'Regular'], [90, 'Serious'], [150, 'Intense']].map(([g, n]) => `<button data-act="goal" data-goal="${g}" aria-pressed="${S.settings.goal === g}">${n} · ${g} XP</button>`).join('')}</div>
       <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="start" data-skill="voc">Start the first lesson</button><button class="linkbtn" data-act="welcomed">Just look around</button></div></div></div>`;
   }
 
@@ -1610,7 +1655,7 @@
     const notifState = !('Notification' in window) ? 'Not supported in this browser' : Notification.permission === 'granted' ? (S.settings.notify ? 'On' : 'Allowed') : Notification.permission === 'denied' ? 'Blocked in browser settings' : 'Off';
     return `<div><h1 style="font-size:30px">Settings</h1></div>
       <div class="card">
-        <div class="field"><span class="lbl">Daily goal</span>${seg('goal', S.settings.goal, [[10, 'Casual · 10 XP'], [20, 'Regular · 20 XP'], [30, 'Serious · 30 XP'], [50, 'Intense · 50 XP']])}<span class="hint">Meeting your goal each day builds your streak.</span></div>
+        <div class="field"><span class="lbl">Daily goal</span>${seg('goal', S.settings.goal, [[30, 'Casual · 30 XP'], [60, 'Regular · 60 XP'], [90, 'Serious · 90 XP'], [150, 'Intense · 150 XP']])}<span class="hint">Meeting your goal each day builds your streak.</span></div>
         <div class="field"><div class="row between"><span class="lbl">Sound effects</span>${sw('sound', S.settings.sound, 'Sound effects')}</div></div>
         <div class="field"><div class="row between"><span class="lbl">Unlimited hearts</span>${sw('heartsmode', !S.settings.hearts, 'Unlimited hearts')}</div><span class="hint">Hearts make mistakes cost something. Turn this on for low-pressure practice.</span></div>
         <div class="field"><span class="lbl">Theme</span>${seg('theme', S.settings.theme, [['system', 'Match device'], ['light', 'Light'], ['dark', 'Dark']])}</div>

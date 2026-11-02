@@ -902,3 +902,5 @@ svg.mascot.petted { animation: pet .6s var(--spring); transform-origin: 50% 90%;
 .teach-def { font-size: 20px; font-weight: 700; display: grid; gap: 4px; }
 .teach-def .lbl { font-size: 12px; font-weight: 800; color: var(--brand); text-transform: uppercase; letter-spacing: .08em; }
 .teach-note { margin: 0; font-size: 14px; }
+.teach-alt { font-size: 15px; display: grid; gap: 2px; }
+.teach-alt .lbl { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
