@@ -1645,7 +1645,7 @@
     const mode = (id, color, icon, title, desc, n, disabledMsg) => `<button class="mode" data-act="mode" data-mode="${id}" ${n ? '' : 'disabled'}>
       <span class="icon" style="background:${color}">${icon}</span><span><h3>${title}</h3><p>${n ? desc : disabledMsg}</p></span><span class="chip">${n ? n + ' ready' : '0'}</span></button>`;
     const nm = nextUnlock(mist), nr = nextUnlock(rv);
-    return `<div><h1 style="font-size:30px">Practice</h1><p class="muted" style="margin:4px 0 0">Extra ways to earn XP. Everything here follows the same cooldowns as lessons.</p></div>
+    return `<div><h1 style="font-size:30px">Practice</h1><p class="muted" style="margin:4px 0 0">Extra ways to earn XP and check your progress.</p></div>
       ${weeklyCard()}
       <button class="mode" data-act="go" data-view="essay"><span class="icon" style="background:linear-gradient(135deg,var(--u4),var(--u4b))">${I.quests}</span><span><h3>Essay Lab</h3><p>How to write a high-scoring essay, timed practice prompts, and essay drills.</p></span></button>
       <div class="modes">
