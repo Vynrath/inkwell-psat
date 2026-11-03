@@ -25,7 +25,7 @@
   --mascot: #26336B;
   --mascot-line: #26336B;
   --shadow: 0 1px 2px rgba(23, 32, 58, .06), 0 4px 16px rgba(23, 32, 58, .06);
-  --u1: #3049D8; --u2: #7B47CF; --u3: #0E8086; --u4: #C26A12; --u5: #B83A72; --u6: #2D7A3A; --u7: #4652A0; --u8: #A0522D;
+  --u1: #3049D8; --u2: #7B47CF; --u3: #0E8086; --u4: #C26A12; --u5: #B83A72; --u6: #2D7A3A; --u7: #4652A0; --u8: #A0522D; --u9: #0B6E99; --u10: #8A3FB0; --u11: #7A5C12; --u12: #1F7A5C;
 
   --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -581,7 +581,7 @@ body.in-lesson .toasts { bottom: auto; top: calc(64px + env(safe-area-inset-top,
 
 /* ================= gradients ================= */
 :root {
-  --u1b: #6C5CFF; --u2b: #D04FB0; --u3b: #23B27A; --u4b: #E8A21E; --u5b: #EE5C5C; --u6b: #5BB33A; --u7b: #2E8FD8; --u8b: #E0773A;
+  --u1b: #6C5CFF; --u2b: #D04FB0; --u3b: #23B27A; --u4b: #E8A21E; --u5b: #EE5C5C; --u6b: #5BB33A; --u7b: #2E8FD8; --u8b: #E0773A; --u9b: #22A6D6; --u10b: #C86BE0; --u11b: #D9A42B; --u12b: #3FBF8A;
   --brand-2: #8B5CF6; --good-2: #2EC4A6; --bad-2: #F0782F; --hl-2: #FF9F43; --flame-2: #FF3D6E;
   --g-brand: linear-gradient(135deg, var(--brand), var(--brand-2));
   --g-hl: linear-gradient(90deg, var(--hl), var(--hl-2));
@@ -932,3 +932,16 @@ svg.mascot.petted { animation: pet .6s var(--spring); transform-origin: 50% 90%;
 .rubrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .rubrow small { display: block; }
 .rubrow select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); }
+
+/* Question timer, chips, exam switch, section review */
+.qclock { margin-left: auto; font-family: var(--f-mono); font-weight: 800; font-size: 14px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.qclock.low { color: var(--flame, #E8590C); }
+.qclock.over { background: var(--bad-soft); color: var(--bad); }
+.timer.low { color: var(--bad); }
+.chip.hardchip { background: linear-gradient(135deg, #B83A72, #E8590C); color: #fff; }
+.chip.actchip { background: var(--u9); color: #fff; }
+.examswitch { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.examswitch b { font-size: 17px; }
+.secreview { width: 100%; display: grid; gap: 8px; text-align: left; margin-top: 8px; }
+.secreview h2 { margin: 8px 0 0; }
+.secreview .passage { font-size: 15px; }

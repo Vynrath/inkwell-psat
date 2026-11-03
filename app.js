@@ -7,6 +7,12 @@
   const SKMAP = Object.fromEntries(SK.map((s) => [s.id, s]));
   const UNMAP = Object.fromEntries(UN.map((u) => [u.id, u]));
   const MATH = new Set(['lin', 'exp', 'sta', 'adv', 'geo']);
+  /* SAT/PSAT vs ACT: which units show on the journey. ACT mode = the four ACT units plus shared foundations. */
+  const ACT_PATH = ['u9', 'u10', 'u11', 'u12', 'u5', 'u6', 'u7', 'u8', 'u1'];
+  const examUnits = () => (S.settings.exam === 'act' ? ACT_PATH.map((id) => UNMAP[id]).filter(Boolean) : UN.filter((u) => !u.act));
+  /* Test pace in seconds per question: SAT R&W 64 min / 54 q, SAT math 70 min / 44 q, ACT per section. */
+  const PACE_UNIT = { u9: 42, u10: 67, u11: 67, u12: 60 };
+  const paceFor = (q) => { const u = SKMAP[q.s] && SKMAP[q.s].unit; return PACE_UNIT[u] || (MATH.has(q.s) ? 95 : 71); };
   const MIN = 60e3, HOUR = 36e5, DAY = 864e5;
   // Cooldowns after an answer. Box 0 = answered wrong (back soon); each correct answer moves it up a box.
   const INTERVALS = [10 * MIN, 1 * DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY];
@@ -30,9 +36,9 @@
     streak: 0, best: 0, lastGoalDay: null, freezes: 1, days: {},
     daily: freshDaily(), q: {}, ach: {}, owned: ['none'], hat: 'none',
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
-    settings: { goal: 100, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
+    settings: { exam: 'sat', qtimer: 'pace', goal: 100, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
-    learned: [], learnedInit: false, vocabReset: 0, weekly: null, weeklyHist: [], essays: {}, essayXPDay: null, goalX3: true, goal100: true, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
+    learned: [], learnedInit: false, vocabReset: 0, weekly: null, weeklyHist: [], sectionHist: [], pace: { n: 0, on: 0 }, essays: {}, essayXPDay: null, goalX3: true, goal100: true, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
   function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
@@ -304,7 +310,7 @@
   }
   function buildQueue(mode, sid) {
     const now = Date.now();
-    let pool = mode === 'unit' ? unitPool(sid) : mode === 'skill' ? QS.filter((q) => q.s === sid) : mode === 'mistakes' ? mistakesPool() : mode === 'review' ? reviewPool() : mode === 'pt1' ? pt1Pool() : QS.slice();
+    let pool = mode === 'hard' ? QS.filter((q) => q.d === 3) : mode === 'unit' ? unitPool(sid) : mode === 'skill' ? QS.filter((q) => q.s === sid) : mode === 'mistakes' ? mistakesPool() : mode === 'review' ? reviewPool() : mode === 'pt1' ? pt1Pool() : QS.slice();
     let av = pool.filter((q) => isReady(q, now));
     if (mode === 'speed') av = av.filter((q) => ['mc', 'tf', 'cloze', 'punct', 'input'].includes(q.t));
     const wrong = shuffle(av.filter((q) => S.q[q.id] && S.q[q.id].box === 0));
@@ -312,6 +318,7 @@
     const due = av.filter((q) => S.q[q.id] && S.q[q.id].box > 0).sort((a, b) => S.q[a.id].due - S.q[b.id].due);
     if (mode === 'speed') return shuffle(av.filter((q) => wordsOf(q).every(isLearned)));
     if (mode === 'review' || mode === 'mistakes') return capNew([...wrong, ...due], REVIEW_LEN);
+    if (mode === 'hard') return [...wrong, ...fresh, ...due].slice(0, REVIEW_LEN);
     if (mode === 'unit') {
       // Unit review: mistakes first, then test-style questions, then a shuffled mix across the unit's skills.
       const pt = fresh.filter((q) => q.src === 'pt1'), rest = fresh.filter((q) => q.src !== 'pt1');
@@ -440,9 +447,9 @@
     B('journey', 'explorer', 'silver', 'compass', 'Explorer', `Try all ${SK.length} skills`, () => SK.filter((s) => S.tried.includes(s.id)).length, SK.length),
     B('journey', 'genres', 'bronze', 'scroll', 'Genre Hopper', 'Try all four Passage Types skills', () => GENRE_SK.filter((s) => S.tried.includes(s)).length, 4),
     B('journey', 'review1', 'bronze', 'map', 'Region Review', 'Finish a Unit Review', () => Object.keys(S.unitRuns).length, 1),
-    B('journey', 'reviewall', 'gold', 'map', 'Grand Tour', 'Finish a Unit Review in every region', () => Object.keys(S.unitRuns).length, UN.length),
+    B('journey', 'reviewall', 'gold', 'map', 'Grand Tour', 'Finish a Unit Review in every SAT region', () => Object.keys(S.unitRuns).filter((id) => UNMAP[id] && !UNMAP[id].act).length, UN.filter((u) => !u.act).length),
     B('journey', 'chest1', 'bronze', 'chest', 'Treasure Hunter', 'Open a treasure chest on the journey', () => Object.keys(S.chests).length, 1),
-    B('journey', 'chestall', 'gold', 'chest', 'Cartographer', 'Open every treasure chest', () => Object.keys(S.chests).length, UN.length),
+    B('journey', 'chestall', 'gold', 'chest', 'Cartographer', 'Open every SAT treasure chest', () => Object.keys(S.chests).filter((id) => UNMAP[id] && !UNMAP[id].act).length, UN.filter((u) => !u.act).length),
     B('journey', 'seen100', 'bronze', 'eye', 'Curious Mind', 'Answer 100 different questions', () => Object.keys(S.q).length, 100),
     B('journey', 'seen250', 'silver', 'eye', 'Well Read', 'Answer 250 different questions', () => Object.keys(S.q).length, 250),
     B('journey', 'seenall', 'diamond', 'flag', 'Seen It All', 'Answer every question in Inkwell', () => Object.keys(S.q).filter((k) => QS.some((q) => q.id === k)).length, QS.length),
@@ -659,7 +666,7 @@
       cls === 'choice' ? h('span', { class: 'k' }, String(k + 1)) : null, h('span', { html: t })));
   }
   function wMC(q, ctx) {
-    const order = shuffle(q.c.map((_, i) => i)); let sel = null;
+    const order = q.keep ? q.c.map((_, i) => i) : shuffle(q.c.map((_, i) => i)); let sel = null;
     const box = h('div', { class: 'choices' });
     const btns = choiceButtons(order.map((i) => q.c[i]), (k) => { sel = order[k]; btns.forEach((b, j) => b.setAttribute('aria-pressed', j === k)); sfx.tap(); ctx.ready(true); });
     box.append(...btns);
@@ -962,13 +969,14 @@
      20 mixed questions, fixed for the week (Monday to Sunday). Take it any day; progress saves after
      every answer, so you can leave and resume. Doesn't change your review schedule. */
   const WEEKLY_LEN = 20, WEEKLY_RW = 11;
-  const MATH_UNITS = new Set(['u6', 'u7']);
+  const MATH_UNITS = new Set(['u6', 'u7', 'u10']);
   function weekKey(d = new Date()) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return dayKey(x); }
   const sShuffle = (arr, r) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const isMathQ = (q) => SKMAP[q.s] && MATH_UNITS.has(SKMAP[q.s].unit);
   function buildWeekly(wk) {
     const r = seeded('weekly' + wk);
-    const pool = QS.filter((q) => SKMAP[q.s] && !['match', 'sort', 'order'].includes(q.t));
+    const ids = new Set(examUnits().map((u) => u.id));
+    const pool = QS.filter((q) => SKMAP[q.s] && ids.has(SKMAP[q.s].unit) && !['match', 'sort', 'order'].includes(q.t));
     const spread = (list, n) => {
       const by = {}; for (const q of list) (by[q.s] = by[q.s] || []).push(q);
       const lists = sShuffle(Object.values(by).map((l) => sShuffle(l, r)), r), out = [];
@@ -996,10 +1004,39 @@
     let status, btn;
     if (w.done) { status = `Done this week: <b>${w.score}/${w.ids.length}</b>. A new challenge starts Monday.`; btn = `<button class="btn small" disabled>Completed</button>`; }
     else if (n) { status = `In progress: <b>${n}/${w.ids.length}</b> answered. Your answers are saved.`; btn = `<button class="btn small hl" data-act="mode" data-mode="weekly">Resume</button>`; }
-    else { status = `${w.ids.length} mixed questions (${WEEKLY_RW} reading &amp; writing, ${w.ids.length - WEEKLY_RW} math). Take it any day this week, all at once or in pieces.`; btn = `<button class="btn small hl" data-act="mode" data-mode="weekly">Start</button>`; }
+    else { status = `${w.ids.length} mixed questions (${WEEKLY_RW} ${S.settings.exam === 'act' ? 'English, reading &amp; science' : 'reading &amp; writing'}, ${w.ids.length - WEEKLY_RW} math). Take it any day this week, all at once or in pieces.`; btn = `<button class="btn small hl" data-act="mode" data-mode="weekly">Start</button>`; }
     return `<div class="card stack weekly"><div class="row between" style="flex-wrap:wrap;gap:8px"><div><div class="eyebrow">Weekly Challenge</div><h2 style="margin:2px 0 0">See how far you’ve come</h2></div>${btn}</div>
       <p class="muted" style="margin:0">${status}</p>
       <p class="muted" style="margin:0;font-size:14px">Earn 3 XP per correct answer plus 25 XP and 15 gems for finishing. No hearts lost. ${last ? `Last result: ${last.score}/${last.total} (week of ${last.week}).` : ''}</p>${bars}</div>`;
+  }
+
+  /* ============================================================ TIMED SECTIONS
+     Test-like: one overall clock, no feedback until the end, then a review of every miss. */
+  const RW_RANK = { u2: 1, u1: 1, u3: 2, u8: 2, u5: 3, u4: 4 };
+  const SECTIONS = {
+    'sat-rw': { exam: 'sat', name: 'SAT Reading & Writing module', n: 27, mins: 32, pool: (q) => !q.act && !MATH.has(q.s) && SKMAP[q.s] && RW_RANK[SKMAP[q.s].unit] && !VOCAB_SK.has(q.s) && q.s !== 'ess' && ['mc', 'cloze', 'punct'].includes(q.t), sort: (a, b) => RW_RANK[SKMAP[a.s].unit] - RW_RANK[SKMAP[b.s].unit] },
+    'sat-math': { exam: 'sat', name: 'SAT Math module', n: 22, mins: 35, pool: (q) => MATH.has(q.s) && ['mc', 'input'].includes(q.t), sort: (a, b) => (a.d || 1) - (b.d || 1) },
+    'act-eng': { exam: 'act', name: 'ACT English (3 passages)', n: 30, mins: 21, pool: (q) => SKMAP[q.s] && SKMAP[q.s].unit === 'u9', inOrder: true },
+    'act-math': { exam: 'act', name: 'ACT Math', n: 20, mins: 22, pool: (q) => SKMAP[q.s] && SKMAP[q.s].unit === 'u10' },
+    'act-read': { exam: 'act', name: 'ACT Reading (3 passages)', n: 18, mins: 20, pool: (q) => SKMAP[q.s] && SKMAP[q.s].unit === 'u11', inOrder: true },
+    'act-sci': { exam: 'act', name: 'ACT Science (3 passages)', n: 18, mins: 18, pool: (q) => SKMAP[q.s] && SKMAP[q.s].unit === 'u12', inOrder: true },
+  };
+  function buildSection(id) {
+    const sec = SECTIONS[id], pool = QS.filter(sec.pool);
+    if (sec.inOrder) return pool.slice(0, sec.n);
+    // a third hard questions when available, the rest mixed
+    const hard = shuffle(pool.filter((q) => q.d === 3)), rest = shuffle(pool.filter((q) => q.d !== 3));
+    const pick = [...hard.slice(0, Math.round(sec.n / 3)), ...rest].slice(0, sec.n);
+    return sec.sort ? pick.sort(sec.sort) : shuffle(pick);
+  }
+  function sectionsCard() {
+    const ex = S.settings.exam;
+    const rows = Object.entries(SECTIONS).filter(([, s]) => s.exam === ex).map(([id, s]) => {
+      const hist = S.sectionHist.filter((x) => x.id === id), last = hist[hist.length - 1], best = hist.reduce((m, x) => Math.max(m, Math.round((x.score / x.total) * 100)), 0);
+      return `<button class="mode" data-act="section" data-sec="${id}"><span class="icon" style="background:linear-gradient(135deg,#3049D8,#7B47CF)">${I.clock}</span><span><h3>${s.name}</h3><p>${s.n} questions · ${s.mins} min${last ? ` · last ${last.score}/${last.total} · best ${best}%` : ''}</p></span></button>`;
+    }).join('');
+    return `<div class="card stack"><div class="row between" style="flex-wrap:wrap;gap:8px"><div><div class="eyebrow">Timed sections · ${ex === 'act' ? 'ACT' : 'SAT'}</div><h2 style="margin:2px 0 0">Practice under real time limits</h2></div>${examSwitch().replace('examswitch card', 'examswitch')}</div>
+      <p class="muted" style="margin:0">One clock for the whole section, no answers shown until the end, then a review of every miss. Same pace as the real test.</p><div class="modes">${rows}</div></div>`;
   }
 
   /* ============================================================ LESSON */
@@ -1034,16 +1071,17 @@
   function startLesson(mode, sid) {
     closeSheet();
     syncHearts();
-    if (mode !== 'speed' && mode !== 'bell' && mode !== 'weekly' && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
-    let queue = mode === 'bell' ? (bellToday() ? [] : buildBell()) : mode === 'weekly' ? (weekly().done ? [] : weekly().ids.filter((id) => !(id in S.weekly.ans)).map((id) => QS.find((q) => q.id === id)).filter(Boolean)) : buildQueue(mode, sid);
+    if (!['speed', 'bell', 'weekly', 'section'].includes(mode) && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
+    let queue = mode === 'section' ? buildSection(sid) : mode === 'bell' ? (bellToday() ? [] : buildBell()) : mode === 'weekly' ? (weekly().done ? [] : weekly().ids.filter((id) => !(id in S.weekly.ans)).map((id) => QS.find((q) => q.id === id)).filter(Boolean)) : buildQueue(mode, sid);
     let learnEnd = 0;
-    if (mode !== 'bell' && mode !== 'speed' && mode !== 'weekly' && queue.length) { const pre = learnPhase(queue); learnEnd = pre.length; queue = [...pre, ...queue]; }
+    if (!['bell', 'speed', 'weekly', 'section'].includes(mode) && queue.length) { const pre = learnPhase(queue); learnEnd = pre.length; queue = [...pre, ...queue]; }
     if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'weekly') toast('This week\u2019s challenge is done. A new one starts Monday.', I.medal); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
     L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false, learnEnd };
     if (mode === 'speed') L.speedEnd = Date.now() + SPEED_SECS * 1000;
     if (mode === 'skill' && !S.tried.includes(sid)) S.tried.push(sid);
     if (mode === 'unit') L.unit = sid;
     if (mode === 'weekly') { L.total = S.weekly.ids.length; L.done = weeklyAnswered(S.weekly); }
+    if (mode === 'section') { L.sec = SECTIONS[sid]; L.secId = sid; L.secEnd = Date.now() + L.sec.mins * 60000; L.review = []; }
     buildLessonShell();
     showQuestion();
   }
@@ -1061,7 +1099,7 @@
     document.body.append(el);
     document.body.style.overflow = 'hidden'; document.body.classList.add('in-lesson');
     updateLessonTop();
-    if (L.mode === 'speed') L.timer = setInterval(updateLessonTop, 250);
+    if (L.mode === 'speed' || L.mode === 'section') L.timer = setInterval(updateLessonTop, 250);
   }
   function updateLessonTop() {
     if (!L) return;
@@ -1071,6 +1109,11 @@
       bar.style.width = `${100 - (left / (SPEED_SECS * 1000)) * 100}%`;
       st.innerHTML = `<span class="timer num">${Math.ceil(left / 1000)}s</span>`;
       if (left <= 0 && L.state === 'answer' && !L.ended) finishLesson();
+    } else if (L.mode === 'section') {
+      const left = Math.max(0, L.secEnd - Date.now());
+      bar.style.width = `${(L.first.size / L.total) * 100}%`;
+      st.innerHTML = `<span class="timer num${left < 60000 ? ' low' : ''}">${fmtClock(left)}</span>`;
+      if (left <= 0 && !L.ended) finishLesson();
     } else if (L.mode === 'weekly') {
       bar.style.width = `${(L.done / L.total) * 100}%`;
       st.innerHTML = `<span class="hearts" style="color:var(--brand)" aria-label="Weekly Challenge">${I.medal}<span>${L.done}/${L.total}</span></span>`;
@@ -1093,6 +1136,9 @@
       h('span', { class: 'chip', style: `--uc:var(--${unit.color});--uc2:var(--${unit.color}b);background:var(--${unit.color});color:#fff` }, skill.name),
       retry ? h('span', { class: 'chip' }, 'Second try') : null,
       q.learn ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, 'New word') : null,
+      q.d === 3 ? h('span', { class: 'chip hardchip' }, 'Hard') : null,
+      q.act ? h('span', { class: 'chip actchip' }, 'ACT') : null,
+      qTimerOn(q) ? h('span', { class: 'qclock num', id: 'qclock', 'aria-label': 'Time for this question' }, fmtClock(paceFor(q) * 1000)) : null,
       q.bell ? h('span', { class: 'chip bellchip' }, `Bell Ringer \u00b7 was \u201c${KIND[q.origType]}\u201d`) : null,
       q.src === 'pt1' ? h('span', { class: 'chip' }, `Practice Test 1 \u00b7 Q${q.tq}`) : null,
       q.missed ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, 'You missed this on the test') : null));
@@ -1134,8 +1180,18 @@
     foot.className = 'lesson-foot';
     foot.innerHTML = L.w.auto
       ? `<div class="inner"><button class="btn ghost" data-act="skipmatch">Can’t do this now</button></div>`
+      : L.mode === 'section' ? `<div class="inner"><button class="btn ghost" data-act="secskip">Skip</button><button class="btn" id="checkbtn" data-act="check" disabled>Next</button></div>`
       : `<div class="inner"><button class="btn" id="checkbtn" data-act="check" disabled>Check</button></div>`;
     updateLessonTop();
+    clearInterval(L.qTick); L.qTick = null; L.timedOut = false;
+    if (qTimerOn(q)) { L.qStart = Date.now(); L.qLimit = paceFor(q) * 1000; L.qTick = setInterval(qTickFn, 250); }
+  }
+  function qTimerOn(q) { return S.settings.qtimer !== 'off' && L && !['speed', 'weekly', 'section'].includes(L.mode) && !q.learn && q.t !== 'teach'; }
+  function qTickFn() {
+    if (!L || L.state !== 'answer' || !L.qStart) { if (L) { clearInterval(L.qTick); L.qTick = null; } return; }
+    const left = L.qLimit - (Date.now() - L.qStart), el = $('#qclock');
+    if (el) { el.textContent = left > 0 ? fmtClock(left) : '+' + fmtClock(-left); el.classList.toggle('over', left <= 0); el.classList.toggle('low', left > 0 && left < 10000); }
+    if (left <= 0 && S.settings.qtimer === 'strict' && L.w && !L.w.auto) { clearInterval(L.qTick); L.qTick = null; L.timedOut = true; const { answer } = L.w.check(); resolve(false, answer); }
   }
 
   function onCheck() {
@@ -1150,7 +1206,16 @@
     if (L.mode === 'speed' && Date.now() > L.speedEnd) { finishLesson(); return; }
     L.state = 'feedback';
     const q = L.q;
+    if (L.qTick) { clearInterval(L.qTick); L.qTick = null; }
+    if (L.qStart && !q.learn) { S.pace.n++; if (Date.now() - L.qStart <= L.qLimit) S.pace.on++; L.qStart = 0; }
     if (q.learn) { resolveLearn(q, ok, answer); return; }
+    if (L.mode === 'section') {
+      L.state = 'feedback';
+      if (!L.first.has(q.id)) { L.first.set(q.id, ok); grade(q, ok); S.totalAnswered++; if (ok) { S.totalCorrect++; S.daily.correct++; if (MATH.has(q.s)) S.daily.math++; } L.review.push({ q, ok, answer }); }
+      L.done++; sfx.tap(); save();
+      setTimeout(() => { if (!L || L.ended) return; L.idx++; if (L.idx >= L.queue.length) finishLesson(); else showQuestion(); }, 140);
+      return;
+    }
     const first = !L.first.has(q.id);
     if (first) {
       L.first.set(q.id, ok); if (L.mode === 'weekly') S.weekly.ans[q.id] = ok; else if (q.bell) bellGrade(q, ok); else grade(q, ok); S.totalAnswered++;
@@ -1190,7 +1255,7 @@
       <div class="verdict" role="status" aria-live="assertive">
         ${mascot(ok ? 'happy' : 'sad')}
         <div>
-          <h3>${ok ? pick(PRAISE) : pick(OOPS)}</h3>
+          <h3>${ok ? pick(PRAISE) : L.timedOut ? 'Time\u2019s up.' : pick(OOPS)}</h3>
           ${!ok && answer ? `<p class="ans">Correct answer: ${esc(strip(answer))}</p>` : ''}
           <p>${esc(q.e)}</p>
           ${willRetry ? '<p class="muted">You’ll see this one again at the end of the lesson.</p>' : ''}
@@ -1256,7 +1321,15 @@
     let gems = completed ? 5 + (perfect ? 5 : 0) : 0;
     if (L.mode === 'bell') { xp = L.xp + 10 + (perfect ? 5 : 0); gems = 10 + (perfect ? 5 : 0); S.bell = { day: dayKey(), done: true, score: right, total: answered }; S.bellRuns++; S.daily.bell = 1; }
     if (L.mode === 'speed') { xp = L.speedScore * 2 + (L.speedScore >= 8 ? 5 : 0); gems = L.speedScore >= 8 ? 5 : 0; S.bestSpeed = Math.max(S.bestSpeed, L.speedScore); }
-    let wk = null;
+    let wk = null, secRes = null;
+    if (L.mode === 'section') {
+      const total = L.queue.length, score = [...L.first.values()].filter(Boolean).length, secs0 = Math.round((Date.now() - L.start) / 1000);
+      const timeUp = Date.now() >= L.secEnd, finished = L.first.size >= total;
+      xp = score * 2 + (finished || timeUp ? 10 : 0); gems = finished || timeUp ? 5 : 0;
+      S.sectionHist.push({ id: L.secId, date: dayKey(), score, total, secs: secs0 });
+      secRes = { score, total, unanswered: total - L.first.size, timeUp };
+      const ls = $('#lstat'); if (ls) ls.innerHTML = '';
+    }
     if (L.mode === 'weekly') {
       const w = S.weekly, all = weeklyAnswered(w) >= w.ids.length;
       xp = 0; gems = 0;
@@ -1279,12 +1352,16 @@
     if (completed) { const hr = new Date().getHours(); if (hr >= 22) S.owl = 1; if (hr < 7 && hr >= 3) S.lark = 1; }
     checkQuests(); checkAch(); save();
     const secs = Math.round((Date.now() - L.start) / 1000);
-    const acc = wk ? Math.round((wk.score / wk.total) * 100) : answered ? Math.round((right / answered) * 100) : 0;
+    const acc = secRes ? Math.round((secRes.score / secRes.total) * 100) : wk ? Math.round((wk.score / wk.total) * 100) : answered ? Math.round((right / answered) * 100) : 0;
     const body = $('#lbody'), foot = $('#lfoot');
     $('#lesson .bar > i').style.width = '100%';
     let title = 'Lesson complete!', mood = 'happy', sub = '';
     if (outOfHearts) { title = 'Out of hearts'; mood = 'sad'; sub = `Your answers were saved. Hearts refill one every 20 minutes, or you can refill them in the shop.`; }
     else if (L.mode === 'speed') { title = `Time! You scored ${L.speedScore}`; mood = L.speedScore >= 8 ? 'wow' : 'happy'; sub = S.bestSpeed === L.speedScore && L.speedScore > 0 ? 'That’s your best Speed Round yet.' : `Best so far: ${S.bestSpeed}`; }
+    else if (secRes) {
+      title = `${L.sec.name}: ${secRes.score}/${secRes.total}`; mood = secRes.score / secRes.total >= 0.8 ? 'wow' : 'happy';
+      sub = `${Math.round((secRes.score / secRes.total) * 100)}% correct${secRes.unanswered ? `, ${secRes.unanswered} ${secRes.timeUp ? 'not reached before time ran out' : 'left unanswered'}` : ''}. Missed questions are below and back in \u201cFix your mistakes.\u201d`;
+    }
     else if (L.mode === 'weekly' && wk) {
       title = `Weekly Challenge: ${wk.score}/${wk.total}`; mood = wk.score / wk.total >= 0.8 ? 'wow' : 'happy';
       const d = wk.prev ? wk.score - wk.prev.score : null;
@@ -1301,6 +1378,12 @@
       <div class="kv"><div><b data-count="${xp}" data-prefix="+">+${xp}</b><span>XP</span></div><div><b>${L.mode === 'speed' ? L.speedScore : acc + '%'}</b><span>${L.mode === 'speed' ? 'Correct' : 'Accuracy'}</span></div><div><b>${Math.floor(secs / 60)}:${pad(secs % 60)}</b><span>Time</span></div></div>
       <div class="kv"><div><b data-count="${L.maxCombo}">${L.maxCombo}</b><span>Best combo</span></div><div><b data-count="${gems}" data-prefix="+">+${gems}</b><span>Gems</span></div><div><b>${S.daily.xp}/${S.settings.goal}</b><span>Daily goal</span></div></div>
     </div>`;
+    if (secRes) {
+      const missed = L.review.filter((r) => !r.ok), skipped = L.queue.filter((q) => !L.first.has(q.id));
+      if (missed.length || skipped.length) body.insertAdjacentHTML('beforeend', `<div class="secreview"><h2>Review</h2>${[...missed.map((r) => ({ q: r.q, answer: r.answer })), ...skipped.map((q) => ({ q, answer: null, skipped: true }))].map((r, i) => {
+        const q = r.q, ans = r.answer || (q.c ? q.c[q.a] : q.a ? q.a[0] : '');
+        return `<details class="eguide"><summary>${i + 1}. ${esc(strip(q.q || q.p || '').slice(0, 90))}\u2026${r.skipped ? ' <small class="muted">(not reached)</small>' : ''}</summary><div class="ebody">${q.p ? `<div class="passage" style="max-height:220px;overflow:auto">${q.p}</div>` : ''}${q.q ? `<p><b>${q.q}</b></p>` : ''}<p class="ans"><b>Correct answer:</b> ${esc(strip(String(ans)))}</p><p>${esc(q.e)}</p></div></details>`; }).join('')}</div>`);
+    }
     body.querySelectorAll('[data-count]').forEach((el, i) => { const n = +el.dataset.count, p = el.dataset.prefix || ''; el.textContent = p + '0'; setTimeout(() => countUp(el, n, 800, p), 350 + i * 120); });
     foot.className = 'lesson-foot';
     foot.innerHTML = `<div class="inner"><button class="btn" data-act="${extended ? 'streakscreen' : 'endlesson'}" id="contbtn">Continue</button></div>`;
@@ -1404,7 +1487,7 @@
       <p class="muted" style="margin:0;font-size:14px">Unlimited hearts can be switched back off any time in Settings.</p>`);
   }
   function quitSheet() {
-    openSheet(`<h2>${L && L.mode === 'weekly' ? 'Take a break?' : 'Quit this lesson?'}</h2><p class="muted" style="margin:0">${L && L.mode === 'weekly' ? `Your ${weeklyAnswered(S.weekly)} answers are saved. Come back any day this week to finish and collect your XP.` : 'Answers you already gave are saved, but you won’t get the completion bonus.'}</p>
+    openSheet(`<h2>${L && L.mode === 'weekly' ? 'Take a break?' : L && L.mode === 'section' ? 'End the section now?' : 'Quit this lesson?'}</h2><p class="muted" style="margin:0">${L && L.mode === 'weekly' ? `Your ${weeklyAnswered(S.weekly)} answers are saved. Come back any day this week to finish and collect your XP.` : 'Answers you already gave are saved, but you won’t get the completion bonus.'}</p>
       <button class="btn block" data-act="closesheet">Keep going</button><button class="btn ghost block" data-act="quitnow">Quit</button>`);
   }
 
@@ -1515,6 +1598,7 @@
     u1: { name: 'Word Woods', scene: 'trees' }, u2: { name: 'Structure Cliffs', scene: 'cliffs' }, u3: { name: 'Evidence Valley', scene: 'hills' },
     u4: { name: 'Transition River', scene: 'river' }, u5: { name: 'Grammar Gardens', scene: 'flowers' }, u8: { name: 'Story Library', scene: 'books' },
     u6: { name: 'Algebra Peaks', scene: 'peaks' }, u7: { name: 'Data Observatory', scene: 'stars' },
+    u9: { name: 'ACT English Coast', scene: 'river' }, u10: { name: 'ACT Math Ridge', scene: 'peaks' }, u11: { name: 'ACT Reading Room', scene: 'books' }, u12: { name: 'ACT Science Lab', scene: 'stars' },
   };
   const region = (uid) => REGIONS[uid] || { name: UNMAP[uid].name, scene: 'hills' };
   const EMB = {
@@ -1570,7 +1654,7 @@
     sfx.win(); if (btn) btn.classList.add('popping');
     setTimeout(() => { confetti(); toast(`+${CHEST_GEMS} gems from the ${R.name} chest!`, I.gem); checkAch(); save(); renderView(); }, 550);
   }
-  function journeyOrder() { const out = []; UN.forEach((u) => SK.filter((s) => s.unit === u.id).forEach((s) => out.push(s))); return out; }
+  function journeyOrder() { const out = []; examUnits().forEach((u) => SK.filter((s) => s.unit === u.id).forEach((s) => out.push(s))); return out; }
   function drawTrail(animate) {
     const j = document.getElementById('journey'); if (!j) return;
     const svg = j.querySelector('svg.trail'), discs = [...j.querySelectorAll('.path .node .disc')];
@@ -1609,31 +1693,37 @@
       <span class="label">${esc(sk.name)}</span></button></div>`;
   }
 
+  function examSwitch() {
+    const e = S.settings.exam;
+    return `<div class="examswitch card"><div><div class="eyebrow">Studying for</div><b>${e === 'act' ? 'The ACT' : 'The SAT / PSAT'}</b></div>
+      <div class="seg" role="group" aria-label="Test">${[['sat', 'SAT / PSAT'], ['act', 'ACT']].map(([v, l]) => `<button data-act="exam" data-v="${v}" aria-pressed="${e === v}">${l}</button>`).join('')}</div></div>`;
+  }
   function viewLearn() {
     let html = welcomeCard() + noticeCard() + reminderBanner() + bellCard();
     html += `<div class="aside-hide-wide">${todayCard()}</div>`;
-    html += practiceStrip();
+    html += practiceStrip() + examSwitch();
     const order = journeyOrder();
     const nextSk = order.find((s) => skillStats(s.id).seen === 0) || order.find((s) => skillStats(s.id).ready > 0);
     const wave = (k) => Math.round(Math.sin(k * 0.82 + 0.4) * 62);
     let ni = 0, gi = 0;
-    const opened = UN.filter((u) => S.chests[u.id]).length;
-    let allPts = 0; for (const q of QS) { const r = S.q[q.id]; allPts += mastPts(r); }
-    const total = Math.round((allPts / (MAST_BOX * QS.length)) * 100);
+    const JU = examUnits(), jIds = new Set(JU.map((u) => u.id)), JQ = QS.filter((q) => SKMAP[q.s] && jIds.has(SKMAP[q.s].unit));
+    const opened = JU.filter((u) => S.chests[u.id]).length;
+    let allPts = 0; for (const q of JQ) { const r = S.q[q.id]; allPts += mastPts(r); }
+    const total = Math.round((allPts / (MAST_BOX * JQ.length)) * 100);
     html += `<section class="journey" id="journey" aria-label="Your study journey"><svg class="trail" aria-hidden="true"></svg>
       <div class="trailhead"><span class="thicon">${'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + BI.map + '</svg>'}</span><span><b>Trailhead</b><small>Your PSAT journey starts here</small></span></div>`;
-    UN.forEach((u, ui) => {
+    JU.forEach((u, ui) => {
       const skills = SK.filter((s) => s.unit === u.id), R = region(u.id), pct = unitPct(u.id);
       html += `<div class="region scene-${R.scene}" style="--uc:var(--${u.color});--uc2:var(--${u.color}b)" aria-label="${esc(R.name)}: ${esc(u.name)}">
         ${sceneHTML(R.scene, 'l')}${sceneHTML(R.scene, 'r')}
         <div class="signpost"><span class="emblem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EMB[R.scene]}</svg></span>
-          <div class="sp-text"><div class="eyebrow">Stop ${ui + 1} · ${['u6', 'u7'].includes(u.id) ? 'Math' : 'Reading & Writing'}</div><h2>${esc(R.name)}</h2><p>${esc(u.name)}: ${esc(u.blurb)}</p></div>
+          <div class="sp-text"><div class="eyebrow">Stop ${ui + 1} · ${u.act ? 'ACT' : ['u6', 'u7'].includes(u.id) ? 'Math' : S.settings.exam === 'act' ? 'Foundations' : 'Reading & Writing'}</div><h2>${esc(R.name)}</h2><p>${esc(u.name)}: ${esc(u.blurb)}</p></div>
           <span class="sp-pct"><b class="num">${pct}%</b><span>explored</span></span></div>
         <div class="path">${skills.map((s) => nodeHTML(s, u.color, ni++, nextSk && s.id === nextSk.id, wave(gi++))).join('')}${reviewNodeHTML(u, ni++, wave(gi++))}${chestHTML(u, ni++, wave(gi++))}</div></div>`;
     });
     html += `<div class="summit"><span class="flagpin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BI.flag}</svg></span>
-      <div class="eyebrow">The summit</div><h2>${opened === UN.length && total >= 100 ? 'You conquered the whole map!' : opened === UN.length ? 'Every chest found!' : 'Keep climbing'}</h2>
-      <p class="muted" style="margin:0">Journey ${total}% explored · ${opened}/${UN.length} chests opened</p>
+      <div class="eyebrow">The summit</div><h2>${opened === JU.length && total >= 100 ? 'You conquered the whole map!' : opened === JU.length ? 'Every chest found!' : 'Keep climbing'}</h2>
+      <p class="muted" style="margin:0">Journey ${total}% explored · ${opened}/${JU.length} chests opened</p>
       <div class="bar good" aria-label="Journey progress"><i style="width:${total}%"></i></div></div></section>`;
     return html;
   }
@@ -1647,8 +1737,10 @@
     const nm = nextUnlock(mist), nr = nextUnlock(rv);
     return `<div><h1 style="font-size:30px">Practice</h1><p class="muted" style="margin:4px 0 0">Extra ways to earn XP and check your progress.</p></div>
       ${weeklyCard()}
+      ${sectionsCard()}
       <button class="mode" data-act="go" data-view="essay"><span class="icon" style="background:linear-gradient(135deg,var(--u4),var(--u4b))">${I.quests}</span><span><h3>Essay Lab</h3><p>How to write a high-scoring essay, timed practice prompts, and essay drills.</p></span></button>
       <div class="modes">
+        ${(() => { const hp = QS.filter((q) => q.d === 3); return mode('hard', 'linear-gradient(135deg,#B83A72,#3049D8)', I.medal, 'Hard Set', `${hp.length} of the toughest SAT-level questions, 10 at a time.`, hp.filter((q) => isReady(q)).length, 'All hard questions are resting. Come back later.'); })()}
         ${mode('mistakes', 'linear-gradient(135deg,var(--bad),var(--bad-2))', I.redo, 'Fix your mistakes', 'Questions you missed recently, while they’re fresh.', mr, mist.length ? `Nothing to fix yet. Next one is ready in ${fmtDur(nm - Date.now())}.` : 'No mistakes to fix yet. Nice.')}
         ${mode('review', 'var(--g-brand)', I.stack, 'Mixed review', 'Questions across all skills that are due again.', rr, rv.length ? `Nothing is due. Next review unlocks in ${fmtDur(nr - Date.now())}.` : 'Answer a few questions first. Reviews unlock after a day.')}
         ${mode('bell', 'linear-gradient(135deg,#FF8A3D,#E2418F)', I.bell, 'Daily Bell Ringer', 'Missed and older questions, rebuilt in new styles. Once a day.', bellToday() ? 0 : seenPool().length >= 3 ? Math.min(BELL_LEN, seenPool().length) : 0, bellToday() ? `Done today: ${S.bell.score}/${S.bell.total}. A new one starts at midnight.` : 'Answer at least 3 questions to unlock it.')}
@@ -1796,6 +1888,8 @@
     const notifState = !('Notification' in window) ? 'Not supported in this browser' : Notification.permission === 'granted' ? (S.settings.notify ? 'On' : 'Allowed') : Notification.permission === 'denied' ? 'Blocked in browser settings' : 'Off';
     return `<div><h1 style="font-size:30px">Settings</h1></div>
       <div class="card">
+        <div class="field"><span class="lbl">Studying for</span>${seg('exam', S.settings.exam, [['sat', 'SAT / PSAT'], ['act', 'ACT']])}<span class="hint">Changes the journey, Weekly Challenge, and timed sections. Your progress is kept for both.</span></div>
+        <div class="field"><span class="lbl">Question timer</span>${seg('qtimer', S.settings.qtimer, [['off', 'Off'], ['pace', 'Pace'], ['strict', 'Strict']])}<span class="hint">Shows a countdown at real test pace on each question. Pace lets you go over (the clock turns red); Strict counts a question wrong when time runs out.${S.pace.n ? ` You\u2019ve answered ${Math.round((S.pace.on / S.pace.n) * 100)}% of timed questions on pace.` : ''}</span></div>
         <div class="field"><span class="lbl">Daily goal</span>${seg('goal', S.settings.goal, [[60, 'Casual · 60 XP'], [100, 'Regular · 100 XP'], [150, 'Serious · 150 XP'], [200, 'Intense · 200 XP']])}<span class="hint">Meeting your goal each day builds your streak.</span></div>
         <div class="field"><div class="row between"><span class="lbl">Sound effects</span>${sw('sound', S.settings.sound, 'Sound effects')}</div></div>
         <div class="field"><div class="row between"><span class="lbl">Unlimited hearts</span>${sw('heartsmode', !S.settings.hearts, 'Unlimited hearts')}</div><span class="hint">Hearts make mistakes cost something. Turn this on for low-pressure practice.</span></div>
@@ -1879,7 +1973,11 @@
       case 'streakscreen': streakScreen(); break;
       case 'endlesson': endLesson(); break;
       case 'quit': if (L && L.ended) endLesson(); else quitSheet(); break;
-      case 'quitnow': closeSheet(); if (L && L.mode === 'weekly') finishLesson(); else endLesson(); break;
+      case 'quitnow': closeSheet(); if (L && (L.mode === 'weekly' || L.mode === 'section')) finishLesson(); else endLesson(); break;
+      case 'section': startLesson('section', t.dataset.sec); break;
+      case 'secskip': if (L && L.state === 'answer') { const { answer } = L.w.check(); resolve(false, answer); } break;
+      case 'exam': S.settings.exam = t.dataset.v; save(); renderView(); break;
+      case 'qtimer': S.settings.qtimer = t.dataset.v; save(); renderView(); break;
       case 'essayopen': case 'essayback': case 'essaytimer': case 'essaydone': essayAction(t.dataset.act, t); break;
       case 'closesheet': closeSheet(); break;
       case 'goal': S.settings.goal = +t.dataset.goal || +t.dataset.v; save(); renderView(); break;
