@@ -30,9 +30,9 @@
     streak: 0, best: 0, lastGoalDay: null, freezes: 1, days: {},
     daily: freshDaily(), q: {}, ach: {}, owned: ['none'], hat: 'none',
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
-    settings: { goal: 60, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
+    settings: { goal: 100, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
-    learned: [], learnedInit: false, vocabReset: 0, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
+    learned: [], learnedInit: false, vocabReset: 0, weekly: null, weeklyHist: [], essays: {}, essayXPDay: null, goalX3: true, goal100: true, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
   function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
@@ -50,6 +50,7 @@
       if (raw) {
         const o = JSON.parse(raw);
         if (!o.goalX3) { if (o.settings && o.settings.goal) o.settings.goal *= 3; o.goalX3 = true; } // daily goals were tripled
+        if (!o.goal100) { o.settings = o.settings || {}; o.settings.goal = 100; o.goal100 = true; } // daily goal set to 100 XP
         return merge(defaults(), o);
       }
     } catch (e) { /* corrupted: start fresh */ }
@@ -957,6 +958,50 @@
     return W[Math.floor(seeded('wotd' + dayKey())() * W.length)];
   }
 
+  /* ============================================================ WEEKLY CHALLENGE
+     20 mixed questions, fixed for the week (Monday to Sunday). Take it any day; progress saves after
+     every answer, so you can leave and resume. Doesn't change your review schedule. */
+  const WEEKLY_LEN = 20, WEEKLY_RW = 11;
+  const MATH_UNITS = new Set(['u6', 'u7']);
+  function weekKey(d = new Date()) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return dayKey(x); }
+  const sShuffle = (arr, r) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const isMathQ = (q) => SKMAP[q.s] && MATH_UNITS.has(SKMAP[q.s].unit);
+  function buildWeekly(wk) {
+    const r = seeded('weekly' + wk);
+    const pool = QS.filter((q) => SKMAP[q.s] && !['match', 'sort', 'order'].includes(q.t));
+    const spread = (list, n) => {
+      const by = {}; for (const q of list) (by[q.s] = by[q.s] || []).push(q);
+      const lists = sShuffle(Object.values(by).map((l) => sShuffle(l, r)), r), out = [];
+      for (let i = 0; out.length < n && lists.some((l) => l[i]); i++) for (const l of lists) if (l[i] && out.length < n) out.push(l[i]);
+      return out;
+    };
+    const rw = spread(pool.filter((q) => !isMathQ(q)), WEEKLY_RW), math = spread(pool.filter(isMathQ), WEEKLY_LEN - WEEKLY_RW);
+    return sShuffle([...rw, ...math], r).map((q) => q.id);
+  }
+  function weekly() {
+    const wk = weekKey();
+    if (!S.weekly || S.weekly.week !== wk) { S.weekly = { week: wk, ids: buildWeekly(wk), ans: {}, done: false }; save(); }
+    return S.weekly;
+  }
+  const weeklyAnswered = (w) => Object.keys(w.ans).length;
+  function weeklySplit(w) {
+    const out = { rw: [0, 0], math: [0, 0], missed: {} };
+    for (const id of w.ids) { const q = QS.find((x) => x.id === id); if (!q || !(id in w.ans)) continue;
+      const k = isMathQ(q) ? 'math' : 'rw'; out[k][1]++; if (w.ans[id]) out[k][0]++; else out.missed[q.s] = (out.missed[q.s] || 0) + 1; }
+    return out;
+  }
+  function weeklyCard() {
+    const w = weekly(), n = weeklyAnswered(w), hist = S.weeklyHist.slice(-8), last = S.weeklyHist[S.weeklyHist.length - 1];
+    const bars = hist.length ? `<div class="whist" aria-label="Weekly Challenge history">${hist.map((h) => `<div class="wb" title="Week of ${h.week}: ${h.score}/${h.total}"><i style="height:${Math.max(6, Math.round((h.score / h.total) * 100))}%"></i><small class="num">${h.score}</small></div>`).join('')}</div>` : '';
+    let status, btn;
+    if (w.done) { status = `Done this week: <b>${w.score}/${w.ids.length}</b>. A new challenge starts Monday.`; btn = `<button class="btn small" disabled>Completed</button>`; }
+    else if (n) { status = `In progress: <b>${n}/${w.ids.length}</b> answered. Your answers are saved.`; btn = `<button class="btn small hl" data-act="mode" data-mode="weekly">Resume</button>`; }
+    else { status = `${w.ids.length} mixed questions (${WEEKLY_RW} reading &amp; writing, ${w.ids.length - WEEKLY_RW} math). Take it any day this week, all at once or in pieces.`; btn = `<button class="btn small hl" data-act="mode" data-mode="weekly">Start</button>`; }
+    return `<div class="card stack weekly"><div class="row between" style="flex-wrap:wrap;gap:8px"><div><div class="eyebrow">Weekly Challenge</div><h2 style="margin:2px 0 0">See how far you’ve come</h2></div>${btn}</div>
+      <p class="muted" style="margin:0">${status}</p>
+      <p class="muted" style="margin:0;font-size:14px">Earn 3 XP per correct answer plus 25 XP and 15 gems for finishing. No hearts lost. ${last ? `Last result: ${last.score}/${last.total} (week of ${last.week}).` : ''}</p>${bars}</div>`;
+  }
+
   /* ============================================================ LESSON */
   let L = null;
   const PRAISE = ['Nice!', 'Correct!', 'You got it.', 'Sharp reading.', 'Exactly right.', 'Great work!', 'Nailed it.'];
@@ -989,15 +1034,16 @@
   function startLesson(mode, sid) {
     closeSheet();
     syncHearts();
-    if (mode !== 'speed' && mode !== 'bell' && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
-    let queue = mode === 'bell' ? (bellToday() ? [] : buildBell()) : buildQueue(mode, sid);
+    if (mode !== 'speed' && mode !== 'bell' && mode !== 'weekly' && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
+    let queue = mode === 'bell' ? (bellToday() ? [] : buildBell()) : mode === 'weekly' ? (weekly().done ? [] : weekly().ids.filter((id) => !(id in S.weekly.ans)).map((id) => QS.find((q) => q.id === id)).filter(Boolean)) : buildQueue(mode, sid);
     let learnEnd = 0;
-    if (mode !== 'bell' && mode !== 'speed' && queue.length) { const pre = learnPhase(queue); learnEnd = pre.length; queue = [...pre, ...queue]; }
-    if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
+    if (mode !== 'bell' && mode !== 'speed' && mode !== 'weekly' && queue.length) { const pre = learnPhase(queue); learnEnd = pre.length; queue = [...pre, ...queue]; }
+    if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'weekly') toast('This week\u2019s challenge is done. A new one starts Monday.', I.medal); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
     L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false, learnEnd };
     if (mode === 'speed') L.speedEnd = Date.now() + SPEED_SECS * 1000;
     if (mode === 'skill' && !S.tried.includes(sid)) S.tried.push(sid);
     if (mode === 'unit') L.unit = sid;
+    if (mode === 'weekly') { L.total = S.weekly.ids.length; L.done = weeklyAnswered(S.weekly); }
     buildLessonShell();
     showQuestion();
   }
@@ -1025,6 +1071,9 @@
       bar.style.width = `${100 - (left / (SPEED_SECS * 1000)) * 100}%`;
       st.innerHTML = `<span class="timer num">${Math.ceil(left / 1000)}s</span>`;
       if (left <= 0 && L.state === 'answer' && !L.ended) finishLesson();
+    } else if (L.mode === 'weekly') {
+      bar.style.width = `${(L.done / L.total) * 100}%`;
+      st.innerHTML = `<span class="hearts" style="color:var(--brand)" aria-label="Weekly Challenge">${I.medal}<span>${L.done}/${L.total}</span></span>`;
     } else if (L.mode === 'bell') {
       bar.style.width = `${(L.done / L.total) * 100}%`;
       st.innerHTML = `<span class="hearts" style="color:var(--flame)" aria-label="Bell Ringer">${I.bell}<span>${L.done}/${L.total}</span></span>`;
@@ -1104,7 +1153,7 @@
     if (q.learn) { resolveLearn(q, ok, answer); return; }
     const first = !L.first.has(q.id);
     if (first) {
-      L.first.set(q.id, ok); if (q.bell) bellGrade(q, ok); else grade(q, ok); S.totalAnswered++;
+      L.first.set(q.id, ok); if (L.mode === 'weekly') S.weekly.ans[q.id] = ok; else if (q.bell) bellGrade(q, ok); else grade(q, ok); S.totalAnswered++;
       if (ok) { S.totalCorrect++; S.daily.correct++; if (MATH.has(q.s)) S.daily.math++; }
     }
     L.w.reveal(ok);
@@ -1115,11 +1164,11 @@
       L.done++; if (L.mode === 'speed') L.speedScore++;
       sfx.ok();
       restart($('#lesson .bar'), 'shine');
-      xpFloat(`+${(first ? 2 : 1) + (L.combo >= 3 ? 1 : 0)} XP`);
+      xpFloat(L.mode === 'weekly' ? '+3 XP' : `+${(first ? 2 : 1) + (L.combo >= 3 ? 1 : 0)} XP`);
       if ([3, 5, 10, 15].includes(L.combo)) comboFlash(L.combo);
     } else {
       L.combo = 0; sfx.no();
-      if (L.mode === 'bell') L.done++;
+      if (L.mode === 'bell' || L.mode === 'weekly') L.done++;
       else if (L.mode !== 'speed') {
         loseHeart(); L.lostHeart = S.settings.hearts;
         if (!L.retried.has(q.id)) { L.retried.add(q.id); L.queue.push(q); } else L.done++;
@@ -1136,7 +1185,7 @@
     }
     const foot = $('#lfoot');
     foot.className = 'lesson-foot ' + (ok ? 'ok' : 'no');
-    const willRetry = !ok && L.mode !== 'speed' && L.mode !== 'bell' && L.queue.lastIndexOf(q) > L.idx;
+    const willRetry = !ok && L.mode !== 'speed' && L.mode !== 'bell' && L.mode !== 'weekly' && L.queue.lastIndexOf(q) > L.idx;
     foot.innerHTML = `
       <div class="verdict" role="status" aria-live="assertive">
         ${mascot(ok ? 'happy' : 'sad')}
@@ -1189,7 +1238,7 @@
   function onContinue() {
     if (!L || L.state !== 'feedback') return;
     if (L.mode === 'speed' && Date.now() >= L.speedEnd) { finishLesson(); return; }
-    if (L.mode !== 'speed' && L.mode !== 'bell' && S.settings.hearts && S.hearts <= 0) { finishLesson(true); return; }
+    if (L.mode !== 'speed' && L.mode !== 'bell' && L.mode !== 'weekly' && S.settings.hearts && S.hearts <= 0) { finishLesson(true); return; }
     if (L.q && L.q.t === 'teach') L.done++;
     L.idx++;
     if (L.idx >= L.queue.length) finishLesson(); else showQuestion();
@@ -1207,6 +1256,19 @@
     let gems = completed ? 5 + (perfect ? 5 : 0) : 0;
     if (L.mode === 'bell') { xp = L.xp + 10 + (perfect ? 5 : 0); gems = 10 + (perfect ? 5 : 0); S.bell = { day: dayKey(), done: true, score: right, total: answered }; S.bellRuns++; S.daily.bell = 1; }
     if (L.mode === 'speed') { xp = L.speedScore * 2 + (L.speedScore >= 8 ? 5 : 0); gems = L.speedScore >= 8 ? 5 : 0; S.bestSpeed = Math.max(S.bestSpeed, L.speedScore); }
+    let wk = null;
+    if (L.mode === 'weekly') {
+      const w = S.weekly, all = weeklyAnswered(w) >= w.ids.length;
+      xp = 0; gems = 0;
+      if (all && !w.done) {
+        const sp = weeklySplit(w), score = Object.values(w.ans).filter(Boolean).length;
+        const prev = S.weeklyHist[S.weeklyHist.length - 1];
+        xp = score * 3 + 25; gems = 15;
+        w.done = true; w.score = score;
+        S.weeklyHist.push({ week: w.week, score, total: w.ids.length, rw: sp.rw, math: sp.math, date: dayKey() });
+        wk = { score, total: w.ids.length, sp, prev };
+      }
+    }
     const extended = addXP(xp);
     S.gems += gems;
     if (completed) { S.lessons++; S.daily.lessons++; }
@@ -1217,12 +1279,19 @@
     if (completed) { const hr = new Date().getHours(); if (hr >= 22) S.owl = 1; if (hr < 7 && hr >= 3) S.lark = 1; }
     checkQuests(); checkAch(); save();
     const secs = Math.round((Date.now() - L.start) / 1000);
-    const acc = answered ? Math.round((right / answered) * 100) : 0;
+    const acc = wk ? Math.round((wk.score / wk.total) * 100) : answered ? Math.round((right / answered) * 100) : 0;
     const body = $('#lbody'), foot = $('#lfoot');
     $('#lesson .bar > i').style.width = '100%';
     let title = 'Lesson complete!', mood = 'happy', sub = '';
     if (outOfHearts) { title = 'Out of hearts'; mood = 'sad'; sub = `Your answers were saved. Hearts refill one every 20 minutes, or you can refill them in the shop.`; }
     else if (L.mode === 'speed') { title = `Time! You scored ${L.speedScore}`; mood = L.speedScore >= 8 ? 'wow' : 'happy'; sub = S.bestSpeed === L.speedScore && L.speedScore > 0 ? 'That’s your best Speed Round yet.' : `Best so far: ${S.bestSpeed}`; }
+    else if (L.mode === 'weekly' && wk) {
+      title = `Weekly Challenge: ${wk.score}/${wk.total}`; mood = wk.score / wk.total >= 0.8 ? 'wow' : 'happy';
+      const d = wk.prev ? wk.score - wk.prev.score : null;
+      const weak = Object.entries(wk.sp.missed).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([sid]) => SKMAP[sid].name);
+      sub = `Reading & writing ${wk.sp.rw[0]}/${wk.sp.rw[1]} \u00b7 Math ${wk.sp.math[0]}/${wk.sp.math[1]}. ` + (d == null ? 'This is your baseline; next week shows your progress.' : d > 0 ? `Up ${d} from last time!` : d < 0 ? `Down ${-d} from last time. Check the skills below.` : 'Same as last time.') + (weak.length ? ` Work on: ${weak.join(', ')}.` : ' Nothing missed!');
+    }
+    else if (L.mode === 'weekly') { title = 'Progress saved'; mood = 'happy'; sub = `${weeklyAnswered(S.weekly)}/${S.weekly.ids.length} answered. Finish the rest any day this week to collect your XP.`; }
     else if (L.mode === 'unit' && !outOfHearts && answered) { title = perfect ? 'Perfect Unit Review!' : 'Unit Review complete!'; mood = perfect ? 'wow' : 'happy'; sub = `${UNMAP[L.unit].name}: ${right} of ${answered} right on the first try.`; }
     else if (L.mode === 'bell') { title = perfect ? 'Perfect Bell Ringer!' : 'Bell Ringer done!'; mood = perfect ? 'wow' : 'happy'; sub = perfect ? 'Every old answer still stuck. +15 XP bonus and +15 gems.' : `${right} of ${answered} right. Anything you missed is back in \u201cFix your mistakes.\u201d`; }
     else if (perfect) { title = 'Perfect lesson!'; mood = 'wow'; sub = 'No mistakes. +5 bonus XP and +5 bonus gems.'; }
@@ -1235,7 +1304,7 @@
     body.querySelectorAll('[data-count]').forEach((el, i) => { const n = +el.dataset.count, p = el.dataset.prefix || ''; el.textContent = p + '0'; setTimeout(() => countUp(el, n, 800, p), 350 + i * 120); });
     foot.className = 'lesson-foot';
     foot.innerHTML = `<div class="inner"><button class="btn" data-act="${extended ? 'streakscreen' : 'endlesson'}" id="contbtn">Continue</button></div>`;
-    if (!outOfHearts) { sfx.win(); if (perfect || L.mode === 'speed' && L.speedScore >= 8) confetti(); }
+    if (!outOfHearts) { sfx.win(); if (perfect || L.mode === 'speed' && L.speedScore >= 8 || (wk && wk.prev && wk.score > wk.prev.score)) confetti(); }
     setTimeout(() => { const c = $('#contbtn'); if (c) c.focus({ preventScroll: true }); }, 30);
   }
 
@@ -1335,7 +1404,7 @@
       <p class="muted" style="margin:0;font-size:14px">Unlimited hearts can be switched back off any time in Settings.</p>`);
   }
   function quitSheet() {
-    openSheet(`<h2>Quit this lesson?</h2><p class="muted" style="margin:0">Answers you already gave are saved, but you won’t get the completion bonus.</p>
+    openSheet(`<h2>${L && L.mode === 'weekly' ? 'Take a break?' : 'Quit this lesson?'}</h2><p class="muted" style="margin:0">${L && L.mode === 'weekly' ? `Your ${weeklyAnswered(S.weekly)} answers are saved. Come back any day this week to finish and collect your XP.` : 'Answers you already gave are saved, but you won’t get the completion bonus.'}</p>
       <button class="btn block" data-act="closesheet">Keep going</button><button class="btn ghost block" data-act="quitnow">Quit</button>`);
   }
 
@@ -1347,6 +1416,7 @@
     { id: 'profile', label: 'Profile', icon: I.profile },
     { id: 'shop', label: 'Shop', icon: I.shop },
     { id: 'prefs', label: 'Settings', icon: I.gear },
+    { id: 'essay', label: 'Essay Lab', icon: I.quests, hidden: true },
   ];
   const curView = () => { const v = (location.hash || '').slice(1); return VIEWS.some((x) => x.id === v) ? v : 'learn'; };
 
@@ -1356,7 +1426,7 @@
       <div class="shell">
         <nav class="rail" aria-label="Main">
           <div class="brand">${mascot('happy', S.hat, 'mascot')}<span>Inkwell</span></div>
-          ${VIEWS.map((v) => `<button class="tab" data-act="go" data-view="${v.id}">${v.icon}<span>${v.label}</span></button>`).join('')}
+          ${VIEWS.filter((v) => !v.hidden).map((v) => `<button class="tab" data-act="go" data-view="${v.id}">${v.icon}<span>${v.label}</span></button>`).join('')}
         </nav>
         <main class="main">
           <div class="topbar"><div class="brand">${mascot('happy', S.hat, 'mascot')}<span>Inkwell</span></div><div class="stats" id="stats"></div></div>
@@ -1364,7 +1434,7 @@
         </main>
         <aside class="aside" id="aside" aria-label="Today"></aside>
       </div>
-      <nav class="tabbar" aria-label="Main">${VIEWS.filter((v) => v.id !== 'prefs').map((v) => `<button class="tab" data-act="go" data-view="${v.id}">${v.icon}<span>${v.label}</span></button>`).join('')}</nav>`;
+      <nav class="tabbar" aria-label="Main">${VIEWS.filter((v) => v.id !== 'prefs' && !v.hidden).map((v) => `<button class="tab" data-act="go" data-view="${v.id}">${v.icon}<span>${v.label}</span></button>`).join('')}</nav>`;
   }
 
   function statsHTML() {
@@ -1422,7 +1492,7 @@
     if (S.welcomed) return '';
     return `<div class="card hello">${mascot('wow', S.hat, 'mascot idle')}<div><div class="eyebrow">Welcome to Inkwell</div><h2>Hi, I’m Dot. Let’s get you PSAT-ready.</h2>
       <p class="muted" style="margin:4px 0 0">Short lessons, every question type on the test, and questions you’ve answered rest for a while before they come back. Pick a daily goal:</p>
-      <div class="goalpick">${[[30, 'Casual'], [60, 'Regular'], [90, 'Serious'], [150, 'Intense']].map(([g, n]) => `<button data-act="goal" data-goal="${g}" aria-pressed="${S.settings.goal === g}">${n} · ${g} XP</button>`).join('')}</div>
+      <div class="goalpick">${[[60, 'Casual'], [100, 'Regular'], [150, 'Serious'], [200, 'Intense']].map(([g, n]) => `<button data-act="goal" data-goal="${g}" aria-pressed="${S.settings.goal === g}">${n} · ${g} XP</button>`).join('')}</div>
       <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="start" data-skill="voc">Start the first lesson</button><button class="linkbtn" data-act="welcomed">Just look around</button></div></div></div>`;
   }
 
@@ -1576,6 +1646,8 @@
       <span class="icon" style="background:${color}">${icon}</span><span><h3>${title}</h3><p>${n ? desc : disabledMsg}</p></span><span class="chip">${n ? n + ' ready' : '0'}</span></button>`;
     const nm = nextUnlock(mist), nr = nextUnlock(rv);
     return `<div><h1 style="font-size:30px">Practice</h1><p class="muted" style="margin:4px 0 0">Extra ways to earn XP. Everything here follows the same cooldowns as lessons.</p></div>
+      ${weeklyCard()}
+      <button class="mode" data-act="go" data-view="essay"><span class="icon" style="background:linear-gradient(135deg,var(--u4),var(--u4b))">${I.quests}</span><span><h3>Essay Lab</h3><p>How to write a high-scoring essay, timed practice prompts, and essay drills.</p></span></button>
       <div class="modes">
         ${mode('mistakes', 'linear-gradient(135deg,var(--bad),var(--bad-2))', I.redo, 'Fix your mistakes', 'Questions you missed recently, while they’re fresh.', mr, mist.length ? `Nothing to fix yet. Next one is ready in ${fmtDur(nm - Date.now())}.` : 'No mistakes to fix yet. Nice.')}
         ${mode('review', 'var(--g-brand)', I.stack, 'Mixed review', 'Questions across all skills that are due again.', rr, rv.length ? `Nothing is due. Next review unlocks in ${fmtDur(nr - Date.now())}.` : 'Answer a few questions first. Reviews unlock after a day.')}
@@ -1585,6 +1657,75 @@
       </div>
       <div class="card stack"><h2>Coming back soon</h2><p class="muted" style="margin:0">Questions you answer rest before you see them again. Here’s when they return.</p>
         <div class="kv"><div><b>${up.day}</b><span>Next 24 hours</span></div><div><b>${up.three}</b><span>Next 3 days</span></div><div><b>${up.week}</b><span>Next 7 days</span></div></div></div>`;
+  }
+
+  /* ============================================================ ESSAY LAB */
+  let essayPid = null, essayTick = null, essayEnd = 0, essaySaveT = null;
+  const wordCount = (t) => (t.trim().match(/\S+/g) || []).length;
+  const RUBRIC = [['ia', 'Ideas & Analysis', 'Clear position; weighs perspectives; explains why it matters'], ['ds', 'Development & Support', 'Specific examples, each explained'],
+    ['or', 'Organization', 'One idea per paragraph, logical order, real transitions'], ['lu', 'Language Use', 'Precise words, varied sentences, few errors']];
+  function viewEssay() {
+    const E = window.INK_ESSAY; if (!E) return '<p>Essay Lab didn’t load. Refresh the page.</p>';
+    const p = essayPid && E.prompts.find((x) => x.id === essayPid);
+    if (p) return essayWriter(p);
+    return `<div><h1 style="font-size:30px">Essay Lab</h1><p class="muted" style="margin:4px 0 0">How to write a high-scoring essay, timed practice, and drills. Built for the optional ACT Writing test; the same skills power SAT/ACT English questions and school essays.</p></div>
+      <div class="card stack"><h2>Drill the skills</h2><p class="muted" style="margin:0">Theses, evidence, analysis, counterarguments, and conclusions as quick questions. It’s also on your journey in Expression of Ideas.</p>
+        <button class="btn" data-act="start" data-skill="ess">Start an Essay Essentials lesson</button></div>
+      <div class="card stack"><h2>The guide</h2>${E.guide.map((g, i) => `<details class="eguide"${i === 0 ? ' open' : ''}><summary>${g.title}</summary><div class="ebody">${g.html}</div></details>`).join('')}</div>
+      <div class="card stack"><h2>Timed practice</h2><p class="muted" style="margin:0">One prompt, 40 minutes. Drafts save as you type. Finish an essay of 250+ words for 20 XP and 5 gems (once a day), then score yourself with the rubric.</p>
+        <div class="modes">${E.prompts.map((x) => { const d = S.essays[x.id]; return `<button class="mode" data-act="essayopen" data-pid="${x.id}"><span><h3>${esc(x.title)}</h3><p>${d ? (d.done ? `Finished · ${d.words} words${d.self ? ` · self-score ${d.self}/12` : ''}` : `Draft · ${d.words} words`) : 'Not started'}</p></span></button>`; }).join('')}</div></div>`;
+  }
+  function essayWriter(p) {
+    const d = S.essays[p.id] || { text: '', words: 0, rub: {} }, rub = d.rub || {};
+    const opts = (k) => `<select data-rub="${k}"><option value="">–</option>${[1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}"${+rub[k] === n ? ' selected' : ''}>${n}</option>`).join('')}</select>`;
+    return `<button class="btn ghost small" data-act="essayback" style="justify-self:start">← Essay Lab</button>
+      <div class="card stack"><div class="eyebrow">Practice prompt</div><h2 style="margin:0">${esc(p.title)}</h2><p style="margin:0">${esc(p.issue)}</p>
+        ${p.persp.map((t, i) => `<div class="persp"><b>Perspective ${i + 1}</b><p>${esc(t)}</p></div>`).join('')}
+        <p class="muted" style="margin:0"><b>Your task:</b> Write an argumentative essay on this issue. State and develop your own perspective, explain how it relates to at least one of the perspectives above, and support your ideas with reasoning and specific examples.</p></div>
+      <div class="card stack">
+        <div class="row between" style="flex-wrap:wrap;gap:8px"><span class="etimer num" id="etimer">${essayEnd > Date.now() ? fmtClock(essayEnd - Date.now()) : '40:00'}</span><span class="muted num" id="ewords">${d.words || 0} words</span><button class="btn small" data-act="essaytimer" id="etbtn">${essayEnd > Date.now() ? 'Stop timer' : 'Start 40-min timer'}</button></div>
+        <textarea id="essaybox" rows="18" placeholder="Spend about 8 minutes planning: your position, two reasons with examples, and the strongest objection. Then write here.">${esc(d.text || '')}</textarea>
+        <details class="eguide"><summary>Score yourself with the rubric</summary><div class="ebody">
+          <p class="muted" style="margin-top:0">Rate each domain 1–6 the way one reader would (6 = insightful and precise, 4 = clear and adequate, 2 = weak or unclear). Your score is the average, doubled to the 2–12 scale.</p>
+          ${RUBRIC.map(([k, n, h]) => `<div class="rubrow"><div><b>${n}</b><small class="muted">${h}</small></div>${opts(k)}</div>`).join('')}
+          <p style="margin-bottom:0"><b>Self-score: <span id="eself">${d.self ? d.self + '/12' : '–'}</span></b></p></div></details>
+        <button class="btn" data-act="essaydone">${d.done ? 'Save changes' : 'Finish essay'}</button>
+      </div>`;
+  }
+  const fmtClock = (ms) => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${pad(t % 60)}`; };
+  function essayTimerTick() {
+    const el = $('#etimer'), left = essayEnd - Date.now();
+    if (el) el.textContent = fmtClock(left);
+    if (left <= 0) { clearInterval(essayTick); essayTick = null; essayEnd = 0; toast('Time! Finish your sentence and proofread.', I.clock); const b = $('#etbtn'); if (b) b.textContent = 'Start 40-min timer'; }
+  }
+  function essayStore(patch) { S.essays[essayPid] = { text: '', words: 0, rub: {}, ...(S.essays[essayPid] || {}), ...patch, updated: Date.now() }; clearTimeout(essaySaveT); essaySaveT = setTimeout(save, 400); }
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'essaybox' || !essayPid) return;
+    const w = wordCount(e.target.value); essayStore({ text: e.target.value, words: w });
+    const wc = $('#ewords'); if (wc) wc.textContent = `${w} words`;
+  });
+  document.addEventListener('change', (e) => {
+    if (!e.target.dataset || !e.target.dataset.rub || !essayPid) return;
+    const rub = { ...((S.essays[essayPid] || {}).rub || {}), [e.target.dataset.rub]: e.target.value };
+    const vals = RUBRIC.map(([k]) => +rub[k]).filter(Boolean);
+    const self = vals.length === 4 ? Math.round((vals.reduce((a, b) => a + b, 0) / 4) * 2) : null;
+    essayStore({ rub, self }); const el = $('#eself'); if (el) el.textContent = self ? `${self}/12` : '–';
+  });
+  function essayAction(act, t) {
+    if (act === 'essayopen') { essayPid = t.dataset.pid; renderView(); window.scrollTo(0, 0); }
+    else if (act === 'essayback') { essayPid = null; renderView(); window.scrollTo(0, 0); }
+    else if (act === 'essaytimer') {
+      if (essayEnd > Date.now()) { clearInterval(essayTick); essayTick = null; essayEnd = 0; t.textContent = 'Start 40-min timer'; const el = $('#etimer'); if (el) el.textContent = '40:00'; }
+      else { essayEnd = Date.now() + 40 * MIN; clearInterval(essayTick); essayTick = setInterval(essayTimerTick, 1000); t.textContent = 'Stop timer'; essayTimerTick(); }
+    } else if (act === 'essaydone') {
+      const box = $('#essaybox'), text = box ? box.value : '', w = wordCount(text);
+      essayStore({ text, words: w });
+      if (w < 250) { toast(`Keep going: ${w} words so far. Finish at 250+ (strong ACT essays usually run 450+).`, I.clock); save(); return; }
+      const first = !S.essays[essayPid].done; essayStore({ done: true });
+      if (first && S.essayXPDay !== dayKey()) { S.essayXPDay = dayKey(); addXP(20); S.gems += 5; checkQuests(); checkAch(); toast('Essay finished! +20 XP and +5 gems. Now score it with the rubric.', I.check); }
+      else toast('Essay saved.', I.check);
+      save(); renderView();
+    }
   }
 
   function viewQuests() {
@@ -1655,7 +1796,7 @@
     const notifState = !('Notification' in window) ? 'Not supported in this browser' : Notification.permission === 'granted' ? (S.settings.notify ? 'On' : 'Allowed') : Notification.permission === 'denied' ? 'Blocked in browser settings' : 'Off';
     return `<div><h1 style="font-size:30px">Settings</h1></div>
       <div class="card">
-        <div class="field"><span class="lbl">Daily goal</span>${seg('goal', S.settings.goal, [[30, 'Casual · 30 XP'], [60, 'Regular · 60 XP'], [90, 'Serious · 90 XP'], [150, 'Intense · 150 XP']])}<span class="hint">Meeting your goal each day builds your streak.</span></div>
+        <div class="field"><span class="lbl">Daily goal</span>${seg('goal', S.settings.goal, [[60, 'Casual · 60 XP'], [100, 'Regular · 100 XP'], [150, 'Serious · 150 XP'], [200, 'Intense · 200 XP']])}<span class="hint">Meeting your goal each day builds your streak.</span></div>
         <div class="field"><div class="row between"><span class="lbl">Sound effects</span>${sw('sound', S.settings.sound, 'Sound effects')}</div></div>
         <div class="field"><div class="row between"><span class="lbl">Unlimited hearts</span>${sw('heartsmode', !S.settings.hearts, 'Unlimited hearts')}</div><span class="hint">Hearts make mistakes cost something. Turn this on for low-pressure practice.</span></div>
         <div class="field"><span class="lbl">Theme</span>${seg('theme', S.settings.theme, [['system', 'Match device'], ['light', 'Light'], ['dark', 'Dark']])}</div>
@@ -1689,7 +1830,7 @@
     const now = { flame: S.streak, gem: S.gems, heart: S.settings.hearts ? S.hearts : -1 };
     if (lastStats) for (const k of Object.keys(now)) if (now[k] !== lastStats[k]) restart($(`#stats .stat.${k}`), 'bump');
     lastStats = now;
-    const render = { learn: viewLearn, practice: viewPractice, quests: viewQuests, profile: viewProfile, shop: viewShop, prefs: viewPrefs }[v];
+    const render = { learn: viewLearn, practice: viewPractice, quests: viewQuests, profile: viewProfile, shop: viewShop, prefs: viewPrefs, essay: viewEssay }[v];
     const viewEl = $('#view');
     viewEl.innerHTML = render();
     if (v !== lastView) { restart(viewEl, 'enter'); window.scrollTo(0, 0); } else viewEl.classList.remove('enter');
@@ -1738,7 +1879,8 @@
       case 'streakscreen': streakScreen(); break;
       case 'endlesson': endLesson(); break;
       case 'quit': if (L && L.ended) endLesson(); else quitSheet(); break;
-      case 'quitnow': closeSheet(); endLesson(); break;
+      case 'quitnow': closeSheet(); if (L && L.mode === 'weekly') finishLesson(); else endLesson(); break;
+      case 'essayopen': case 'essayback': case 'essaytimer': case 'essaydone': essayAction(t.dataset.act, t); break;
       case 'closesheet': closeSheet(); break;
       case 'goal': S.settings.goal = +t.dataset.goal || +t.dataset.v; save(); renderView(); break;
       case 'welcomed': S.welcomed = true; save(); renderView(); break;

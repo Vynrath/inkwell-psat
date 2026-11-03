@@ -904,3 +904,31 @@ svg.mascot.petted { animation: pet .6s var(--spring); transform-origin: 50% 90%;
 .teach-note { margin: 0; font-size: 14px; }
 .teach-alt { font-size: 15px; display: grid; gap: 2px; }
 .teach-alt .lbl { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+/* Weekly Challenge */
+.weekly { border: 2px solid color-mix(in srgb, var(--brand) 35%, var(--line)); }
+.whist { display: flex; gap: 6px; align-items: flex-end; height: 72px; }
+.whist .wb { flex: 1; max-width: 36px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; }
+.whist .wb i { display: block; width: 100%; border-radius: 6px 6px 2px 2px; background: var(--g-brand, var(--brand)); }
+.whist .wb small { font-size: 11px; color: var(--muted); }
+/* Essay Lab */
+.eguide { border: 1px solid var(--line); border-radius: 12px; padding: 0; background: var(--surface); }
+.eguide summary { cursor: pointer; padding: 12px 14px; font-weight: 800; list-style: none; }
+.eguide summary::-webkit-details-marker { display: none; }
+.eguide summary::after { content: '+'; float: right; color: var(--muted); }
+.eguide[open] summary::after { content: '\2212'; }
+.eguide .ebody { padding: 0 16px 14px; line-height: 1.55; }
+.eguide .ebody ul, .eguide .ebody ol { padding-left: 20px; margin: 6px 0; }
+.eguide .ebody li { margin: 4px 0; }
+.etable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.etable th, .etable td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); }
+.checklist { list-style: none; padding-left: 0 !important; }
+.checklist li::before { content: '\2610  '; color: var(--brand); font-weight: 800; }
+.persp { border-left: 4px solid var(--brand); padding: 6px 12px; background: var(--surface-2); border-radius: 8px; }
+.persp p { margin: 4px 0 0; }
+#essaybox { width: 100%; box-sizing: border-box; min-height: 340px; resize: vertical; font: inherit; font-size: 16px; line-height: 1.6; padding: 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); }
+#essaybox:focus { outline: none; border-color: var(--brand); }
+.etimer { font-family: var(--f-mono); font-size: 26px; font-weight: 800; }
+.rubrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rubrow small { display: block; }
+.rubrow select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); }
