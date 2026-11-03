@@ -945,3 +945,12 @@ svg.mascot.petted { animation: pet .6s var(--spring); transform-origin: 50% 90%;
 .secreview { width: 100%; display: grid; gap: 8px; text-align: left; margin-top: 8px; }
 .secreview h2 { margin: 8px 0 0; }
 .secreview .passage { font-size: 15px; }
+
+/* ACT how-to-solve cards */
+.teach.guide { gap: 10px; }
+.teach.guide .guide-h { margin: 0; font-size: 22px; }
+.teach.guide .ebody { line-height: 1.6; font-size: 16px; }
+.teach.guide .ebody ul, .teach.guide .ebody ol { padding-left: 20px; margin: 6px 0; }
+.teach.guide .ebody li { margin: 5px 0; }
+.teach.guide .passage { margin: 6px 0; }
+.teach.guide .etable td, .teach.guide .etable th { font-size: 14px; }

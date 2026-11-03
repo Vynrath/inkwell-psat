@@ -38,7 +38,7 @@
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
     settings: { exam: 'sat', qtimer: 'pace', goal: 100, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
-    learned: [], learnedInit: false, vocabReset: 0, weekly: null, weeklyHist: [], sectionHist: [], pace: { n: 0, on: 0 }, essays: {}, essayXPDay: null, goalX3: true, goal100: true, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
+    learned: [], learnedInit: false, vocabReset: 0, guides: {}, weekly: null, weeklyHist: [], sectionHist: [], pace: { n: 0, on: 0 }, essays: {}, essayXPDay: null, goalX3: true, goal100: true, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
   function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
@@ -1068,6 +1068,16 @@
       <p class="muted teach-note">New word ${q.n} of ${q.of}. You'll get a quick check on each new word, then the lesson starts.</p>` });
   }
 
+  /* ACT "How to solve" guides: step-by-step cards before the first practice in each ACT skill. */
+  const guideCards = (sid) => (window.INK_ACT_GUIDES[sid] || []).map((g, i, all) => ({ id: `guide-${sid}-${i}`, t: 'guide', learn: true, s: sid, g, n: i + 1, of: all.length }));
+  function guideSheet(sid) {
+    const G = (window.INK_ACT_GUIDES || {})[sid]; if (!G) return;
+    const sk = SKMAP[sid], u = UNMAP[sk.unit];
+    openSheet(`<div class="top"><div class="icon">${esc(sk.icon)}</div><div><div class="eyebrow">How to solve</div><h2>${esc(sk.name)}</h2></div></div>
+      ${G.map((g, i) => `<details class="eguide"${i < 2 ? ' open' : ''}><summary>${i + 1}. ${esc(g.h)}</summary><div class="ebody">${g.html}</div></details>`).join('')}
+      <button class="btn block" data-act="start" data-skill="${sid}">Practice ${esc(sk.name)}</button>`, `var(--${u.color});--uc2:var(--${u.color}b)`);
+  }
+
   function startLesson(mode, sid) {
     closeSheet();
     syncHearts();
@@ -1075,6 +1085,8 @@
     let queue = mode === 'section' ? buildSection(sid) : mode === 'bell' ? (bellToday() ? [] : buildBell()) : mode === 'weekly' ? (weekly().done ? [] : weekly().ids.filter((id) => !(id in S.weekly.ans)).map((id) => QS.find((q) => q.id === id)).filter(Boolean)) : buildQueue(mode, sid);
     let learnEnd = 0;
     if (!['bell', 'speed', 'weekly', 'section'].includes(mode) && queue.length) { const pre = learnPhase(queue); learnEnd = pre.length; queue = [...pre, ...queue]; }
+    const G = (window.INK_ACT_GUIDES || {})[sid];
+    if (mode === 'skill' && G && queue.length && !S.guides[sid]) { const gc = guideCards(sid); learnEnd += gc.length; queue = [...gc, ...queue]; }
     if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'weekly') toast('This week\u2019s challenge is done. A new one starts Monday.', I.medal); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
     L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false, learnEnd };
     if (mode === 'speed') L.speedEnd = Date.now() + SPEED_SECS * 1000;
@@ -1132,10 +1144,10 @@
     const skill = SKMAP[q.s], unit = UNMAP[skill.unit];
     const wrap = h('div', { class: 'qwrap' });
     const retry = L.retried.has(q.id) && L.first.has(q.id);
-    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, q.t === 'teach' ? 'Learn it' : q.kind || KIND[q.t]),
+    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, q.t === 'guide' ? 'How to solve' : q.t === 'teach' ? 'Learn it' : q.kind || KIND[q.t]),
       h('span', { class: 'chip', style: `--uc:var(--${unit.color});--uc2:var(--${unit.color}b);background:var(--${unit.color});color:#fff` }, skill.name),
       retry ? h('span', { class: 'chip' }, 'Second try') : null,
-      q.learn ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, 'New word') : null,
+      q.learn ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, q.t === 'guide' ? 'Strategy' : 'New word') : null,
       q.d === 3 ? h('span', { class: 'chip hardchip' }, 'Hard') : null,
       q.act ? h('span', { class: 'chip actchip' }, 'ACT') : null,
       qTimerOn(q) ? h('span', { class: 'qclock num', id: 'qclock', 'aria-label': 'Time for this question' }, fmtClock(paceFor(q) * 1000)) : null,
@@ -1159,14 +1171,14 @@
       submit: () => onCheck(),
       auto: (ok, answer) => resolve(ok, answer),
     };
-    if (q.t === 'teach') {
-      wrap.append(teachCard(q));
+    if (q.t === 'teach' || q.t === 'guide') {
+      wrap.append(q.t === 'guide' ? h('div', { class: 'teach guide', html: `<h2 class="guide-h">${esc(q.g.h)}</h2><div class="ebody">${q.g.html}</div><p class="muted teach-note">Step ${q.n} of ${q.of}${q.n === q.of ? ' \u00b7 Next up: practice questions.' : ''}</p>` }) : teachCard(q));
       const old0 = body.querySelector('.qwrap');
       if (old0 && !calm()) { old0.classList.add('qout'); setTimeout(() => { if (L && L.q === q) { body.replaceChildren(wrap); body.scrollTop = 0; } }, 150); }
       else { body.replaceChildren(wrap); body.scrollTop = 0; }
       L.state = 'feedback'; L.w = null;
       foot.className = 'lesson-foot';
-      foot.innerHTML = `<div class="inner"><button class="btn" data-act="continue" id="contbtn">Got it</button></div>`;
+      foot.innerHTML = `<div class="inner"><button class="btn" data-act="continue" id="contbtn">${q.t === 'guide' ? (q.n === q.of ? 'Start practice' : 'Next') : 'Got it'}</button></div>`;
       setTimeout(() => { const c = $('#contbtn'); if (c) c.focus({ preventScroll: true }); }, 30);
       updateLessonTop();
       return;
@@ -1304,7 +1316,8 @@
     if (!L || L.state !== 'feedback') return;
     if (L.mode === 'speed' && Date.now() >= L.speedEnd) { finishLesson(); return; }
     if (L.mode !== 'speed' && L.mode !== 'bell' && L.mode !== 'weekly' && S.settings.hearts && S.hearts <= 0) { finishLesson(true); return; }
-    if (L.q && L.q.t === 'teach') L.done++;
+    if (L.q && (L.q.t === 'teach' || L.q.t === 'guide')) L.done++;
+    if (L.q && L.q.t === 'guide' && L.q.n === L.q.of) { S.guides[L.q.s] = true; save(); }
     L.idx++;
     if (L.idx >= L.queue.length) finishLesson(); else showQuestion();
   }
@@ -1434,6 +1447,7 @@
       <div class="kv"><div><b>${st.ready}</b><span>Ready now</span></div><div><b>${st.mast}/${st.total}</b><span>Mastered</span></div><div><b>${st.acc == null ? '–' : Math.round(st.acc * 100) + '%'}</b><span>Accuracy</span></div></div>
       <div class="bar good" aria-label="Skill mastery"><i style="width:${Math.round(st.pct * 100)}%"></i></div>
       <div class="tipline"><b>Tip:</b> ${esc(sk.tip)}</div>
+      ${(window.INK_ACT_GUIDES || {})[sid] ? `<button class="btn ghost block" data-act="guide" data-skill="${sid}">How to solve these questions${S.guides[sid] ? '' : ' (shown before your first lesson)'}</button>` : ''}
       ${body}
       <p class="muted" style="margin:0;font-size:14px">Questions you get right rest for 1 day, then 3, 7, 16, and 35 days. Missed questions come back after 10 minutes.</p>`, `var(--${u.color});--uc2:var(--${u.color}b)`);
   }
@@ -1975,6 +1989,7 @@
       case 'quit': if (L && L.ended) endLesson(); else quitSheet(); break;
       case 'quitnow': closeSheet(); if (L && (L.mode === 'weekly' || L.mode === 'section')) finishLesson(); else endLesson(); break;
       case 'section': startLesson('section', t.dataset.sec); break;
+      case 'guide': guideSheet(t.dataset.skill); break;
       case 'secskip': if (L && L.state === 'answer') { const { answer } = L.w.check(); resolve(false, answer); } break;
       case 'exam': S.settings.exam = t.dataset.v; save(); renderView(); break;
       case 'qtimer': S.settings.qtimer = t.dataset.v; save(); renderView(); break;
