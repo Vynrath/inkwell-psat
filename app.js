@@ -5,6 +5,20 @@
   /* ------------------------------------------------------------------ data */
   const SK = window.INK_SKILLS, UN = window.INK_UNITS, QS = window.INK_QUESTIONS;
   const SKMAP = Object.fromEntries(SK.map((s) => [s.id, s]));
+  /* Every word the app can teach: the 90 drilled vocab words plus the glossary of words used in
+     Vocab Vault / Words in Context questions. */
+  const GLOSS = (window.INK_GLOSSARY || []).map(([w, pos, d, s]) => ({ sid: 'voc', w, pos, d, s, gloss: true }));
+  const ALLW = [...(window.INK_WORDS || []), ...GLOSS];
+  const WMAP = new Map(ALLW.map((x) => [x.w, x]));
+  const WRE = ALLW.map((x) => [x.w, new RegExp(`\\b${x.w.endsWith('y') ? x.w.slice(0, -1) + '(?:y|ies)' : x.w}(?:s|es|d|ed|ing|ly)?\\b`)]);
+  const SCAN_SK = new Set(['voc', 'wic']);
+  // Words a question actually tests or shows as choices (only scanned in vocabulary-type skills).
+  function detectWords(q, promptOnly) {
+    if (!SCAN_SK.has(q.s)) return [];
+    const parts = promptOnly ? [q.q] : [q.q, ...(q.c || []), ...(q.pairs || []).flat(), ...(q.items || []).map((i) => i[0])];
+    const text = String(parts.filter((x) => typeof x === 'string').join(' | ')).replace(/<[^>]+>/g, '').toLowerCase();
+    return WRE.filter(([, re]) => re.test(text)).map(([w]) => w);
+  }
   const UNMAP = Object.fromEntries(UN.map((u) => [u.id, u]));
   const MATH = new Set(['lin', 'exp', 'sta', 'adv', 'geo']);
   /* SAT/PSAT vs ACT: which units show on the journey. ACT mode = the four ACT units plus shared foundations. */
@@ -38,7 +52,7 @@
     lessons: 0, perfects: 0, bellRuns: 0, bell: { day: null, done: false, score: 0, total: 0 }, totalCorrect: 0, totalAnswered: 0, bestComboEver: 0, bestSpeed: 0, mistakeRuns: 0, tried: [],
     settings: { exam: 'sat', qtimer: 'pace', goal: 100, sound: true, hearts: true, theme: 'system', remind: true, remindAt: '19:00', notify: false, lastNotified: null },
     welcomed: false, notice: null,
-    learned: [], learnedInit: false, vocabReset: 0, guides: {}, weekly: null, weeklyHist: [], sectionHist: [], pace: { n: 0, on: 0 }, essays: {}, essayXPDay: null, goalX3: true, goal100: true, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
+    learned: [], learnedInit: false, vocabReset: 0, guides: {}, wordKnow: {}, weekly: null, weeklyHist: [], sectionHist: [], pace: { n: 0, on: 0 }, essays: {}, essayXPDay: null, goalX3: true, goal100: true, chests: {}, unitRuns: {}, pets: 0, owl: 0, lark: 0, perfectBells: 0, newBadges: [],
   });
   function freshDaily() { return { day: dayKey(), xp: 0, lessons: 0, correct: 0, bestCombo: 0, perfect: 0, math: 0, bell: 0, claimed: [] }; }
   function merge(d, o) {
@@ -199,9 +213,14 @@
   function wordsOf(q) {
     if (q.vw) return [q.vw];
     if (q.t === 'match' && q.id.startsWith('vw-')) return q.pairs.map((p) => p[0]);
-    return [];
+    return detectWords(q);
   }
-  const isLearned = (w) => S.learned.includes(w);
+  /* Word knowledge: S.learned = taught and passed the quick check; S.wordKnow[w] = 'known' (you said you
+     know it), 'learn' (you said you don't), 'review' (you missed it, so it gets retaught). */
+  const isLearned = (w) => S.learned.includes(w) || S.wordKnow[w] === 'known';
+  const needsTeach = (w) => !isLearned(w) && (S.wordKnow[w] === 'learn' || S.wordKnow[w] === 'review');
+  const unasked = (w) => !isLearned(w) && !needsTeach(w);
+  function markReview(w) { if (!vocabWord(w)) return false; S.learned = S.learned.filter((x) => x !== w); S.wordKnow[w] = 'review'; return true; }
   if (!S.learnedInit) {
     const set = new Set(S.learned);
     for (const q of QS) if (S.q[q.id]) wordsOf(q).forEach((w) => set.add(w));
@@ -210,7 +229,7 @@
   /* Relearn vocab: forget which words were taught and their question history, so each word comes back
      as a fresh "Learn it" card, then a quick check, then lesson questions. */
   function resetVocab() {
-    S.learned = [];
+    S.learned = []; S.wordKnow = {};
     for (const k of Object.keys(S.q)) if (k.startsWith('vw-')) delete S.q[k];
   }
   if (S.vocabReset < 1) { resetVocab(); S.vocabReset = 1; save(); }
@@ -297,7 +316,7 @@
   const pt1Pool = () => QS.filter((q) => q.src === 'pt1');
   const unitPool = (uid) => QS.filter((q) => SKMAP[q.s] && SKMAP[q.s].unit === uid);
   /* At most NEW_WORDS unlearned vocab words per lesson, so the "learn first" part stays short. */
-  const NEW_WORDS = 4;
+  const NEW_WORDS = 5;
   function capNew(list, n) {
     const fresh = new Set(), out = [];
     for (const q of list) {
@@ -847,7 +866,7 @@
   const BELL_LEN = 6;
   const bellToday = () => S.bell && S.bell.day === dayKey() && S.bell.done;
   const seenPool = () => QS.filter((q) => S.q[q.id]);
-  const vocabWord = (w) => (window.INK_WORDS || []).find((x) => x.w === w);
+  const vocabWord = (w) => WMAP.get(w);
   /* Vocab variations: every time a vocab question is shown it's rebuilt with different wording,
      a different question style, and freshly picked wrong answers (including close "trap" meanings). */
   const rnd1 = (a) => a[Math.floor(Math.random() * a.length)];
@@ -858,7 +877,10 @@
     return { ...it, alts: [it.d, ...v[0]], syn: v[1], traps: v[2], sents: v[3] ? [it.s, v[3]] : [it.s] };
   }
   const nearW = (a, b) => a === b || (window.INK_VOCAB_CLUSTERS || []).some((c) => c.includes(a) && c.includes(b));
-  const otherWords = (it, n) => shuffle((window.INK_WORDS || []).filter((x) => x.pos === it.pos && !nearW(x.w, it.w))).slice(0, n);
+  let ALLOWED = null; // words allowed as wrong-answer choices: ones you know + this lesson's words
+  const otherWordsAny = (it, n) => shuffle((window.INK_WORDS || []).filter((x) => x.pos === it.pos && !nearW(x.w, it.w))).slice(0, n);
+  const otherWords = (it, n) => shuffle(ALLW.filter((x) => x.pos === it.pos && !nearW(x.w, it.w) && (!ALLOWED || ALLOWED.has(x.w)))).slice(0, n);
+  const defOf = (x) => { const v = vInfo(x.w); return v ? rnd1(v.alts) : x.d; };
   const vExplain = (it) => `${capW(it.w)} means ${it.d}${it.syn.length ? ` (similar words: ${it.syn.join(', ')})` : ''}.`;
   function vary(q0) {
     const q = q0.base || q0;
@@ -867,22 +889,24 @@
     if (!q.vw) return q0;
     const it = vInfo(q.vw); if (!it) return q0;
     const expl = vExplain(it);
-    if (q.t === 'cloze') {
-      return { ...q, base: q, p: rnd1(it.sents), c: [it.w, ...otherWords(it, 3).map((x) => x.w)], a: 0, e: `${expl} That is what the clues in the sentence point to.` };
-    }
-    const meaning = rnd1(it.alts), pos = { a: 'adjective', v: 'verb', n: 'noun' }[it.pos], r = Math.random();
-    if (r < 0.4) {
-      // 1–2 close-but-wrong traps plus other words' meanings, reworded too
+    const meaning = rnd1(it.alts), pos = { a: 'adjective', v: 'verb', n: 'noun' }[it.pos];
+    const meaningQ = () => {
       const traps = shuffle(it.traps).slice(0, Math.random() < 0.5 ? 1 : 2);
-      const rest = otherWords(it, 3 - traps.length).map((x) => rnd1(vInfo(x.w).alts));
-      return { ...q, base: q, kind: 'Choose the meaning', q: `What does <b>${it.w}</b> (${pos}) most nearly mean?`, c: [meaning, ...traps, ...rest], a: 0, e: expl };
+      return { ...q, base: q, t: 'mc', kind: 'Choose the meaning', q: `What does <b>${it.w}</b> (${pos}) most nearly mean?`, c: [meaning, ...traps, ...otherWordsAny(it, 3 - traps.length).map(defOf)], a: 0, e: expl };
+    };
+    if (q.t === 'cloze') {
+      const ow = otherWords(it, 3);
+      if (!ow.length) return { ...meaningQ(), kind: 'Meaning in context', p: rnd1(it.sents).replace('___', `<b>${it.w}</b>`), q: `As used here, what does <b>${it.w}</b> most nearly mean?` };
+      return { ...q, base: q, p: rnd1(it.sents), c: [it.w, ...ow.map((x) => x.w)], a: 0, e: `${expl} That is what the clues in the sentence point to.` };
     }
-    if (r < 0.6) return { ...q, base: q, kind: 'Find the word', q: `Which word means \u201c${meaning}\u201d?`, c: [it.w, ...otherWords(it, 3).map((x) => x.w)], a: 0, e: expl };
+    const r = Math.random();
+    if (r < 0.4) return meaningQ(); // 1–2 close-but-wrong traps plus other meanings (plain English, no unknown words)
+    if (r < 0.6) { const ow = otherWords(it, 3); if (!ow.length) return meaningQ(); return { ...q, base: q, kind: 'Find the word', q: `Which word means \u201c${meaning}\u201d?`, c: [it.w, ...ow.map((x) => x.w)], a: 0, e: expl }; }
     if (r < 0.8 && it.syn.length) {
-      const wrong = otherWords(it, 3).map((x) => { const o = vInfo(x.w); return o.syn.length ? rnd1(o.syn) : rnd1(o.alts); });
-      return { ...q, base: q, kind: 'Closest synonym', q: `Which word is closest in meaning to <b>${it.w}</b>?`, c: [rnd1(it.syn), ...wrong], a: 0, e: expl };
+      const ow = otherWords(it, 3); if (!ow.length) return meaningQ();
+      return { ...q, base: q, kind: 'Closest synonym', q: `Which word is closest in meaning to \u201c${rnd1(it.syn)}\u201d?`, c: [it.w, ...ow.map((x) => x.w)], a: 0, e: expl };
     }
-    const right = Math.random() < 0.45, shown = right ? meaning : (it.traps.length ? rnd1(it.traps) : rnd1(vInfo(otherWords(it, 1)[0].w).alts));
+    const right = Math.random() < 0.45, shown = right ? meaning : (it.traps.length ? rnd1(it.traps) : defOf(otherWordsAny(it, 1)[0]));
     return { ...q, base: q, t: 'tf', kind: 'Yes or no', labels: ['Yes', 'No'], q: `Does <b>${it.w}</b> mean \u201c${shown}\u201d?`, a: right,
       e: right ? `Yes. ${expl}` : `No, that\u2019s a close-sounding trap. ${expl}` };
   }
@@ -892,7 +916,7 @@
     const YN = ['Yes', 'No'];
     const wrongChoices = (q.c || []).filter((_, i) => i !== q.a);
     if (q.vw && (q.t === 'mc' || q.t === 'cloze')) {
-      const me = vocabWord(q.vw), pool = (window.INK_WORDS || []).filter((x) => x.pos === me.pos && x.w !== me.w);
+      const me = vocabWord(q.vw), pool = (window.INK_WORDS || []).filter((x) => x.pos === me.pos && x.w !== me.w && isLearned(x.w));
       const opts = shuffle(pool).slice(0, 3);
       const vi = vInfo(me.w), md = rnd1(vi.alts), expl = vExplain(vi);
       if (q.t === 'mc') return { ...base, t: 'mc', kind: 'Reverse it', q: `Which word means \u201c${md}\u201d?`, c: [me.w, ...opts.map((x) => x.w)], a: 0, e: expl };
@@ -1045,18 +1069,33 @@
   const OOPS = ['Not quite.', 'Almost.', 'Close, but not it.', 'Good try.'];
 
   /* New vocab: first a card for each word (meaning + example), then a quick check on each, then the lesson. */
-  function learnPhase(queue) {
-    const words = [...new Set(queue.flatMap(wordsOf))].filter((w) => !isLearned(w)).map(vocabWord).filter(Boolean);
+  function teachPhase(list) {
+    const words = [...new Set(list)].map(vocabWord).filter(Boolean);
     if (!words.length) return [];
     const teach = words.map((it, k) => ({ id: 'teach-' + it.w, t: 'teach', learn: true, s: it.sid, vw: it.w, n: k + 1, of: words.length }));
     const checks = shuffle(words).map((it) => {
-      const others = shuffle((window.INK_WORDS || []).filter((x) => x.pos === it.pos && x.w !== it.w));
-      const opts = [...others.filter((x) => words.includes(x)), ...others.filter((x) => !words.includes(x))].slice(0, 3);
+      // Quick check asks for the meaning, so the wrong choices are plain-English definitions, never unknown words.
+      const others = shuffle(ALLW.filter((x) => x.w !== it.w && !nearW(x.w, it.w) && x.d !== it.d));
+      const opts = [...others.filter((x) => words.includes(x)), ...others.filter((x) => !words.includes(x) && x.pos === it.pos), ...others].filter((x, i, a) => a.indexOf(x) === i).slice(0, 3);
       return { id: 'learncheck-' + it.w, t: 'mc', learn: true, s: it.sid, vw: it.w, kind: 'Quick check',
-        q: `Which word means \u201c${rnd1(vInfo(it.w).alts)}\u201d?`, c: [it.w, ...opts.map((x) => x.w)], a: 0,
+        q: `What does <b>${it.w}</b> mean?`, c: [rnd1(vInfo(it.w).alts), ...opts.map((x) => x.d)], a: 0,
         e: `${it.w[0].toUpperCase() + it.w.slice(1)} means ${it.d}. ${it.s.replace('___', it.w)}` };
     });
     return [...teach, ...checks];
+  }
+  function wordCheckCard(q) {
+    return h('div', { class: 'teach wordcheck', html: `
+      <h2 class="guide-h">Do you know these words?</h2>
+      <p class="muted" style="margin:0">This lesson uses ${q.words.length === 1 ? 'this word' : `these ${q.words.length} words`}. Be honest: any you don\u2019t know get a quick lesson first, and you won\u2019t be asked about ${q.words.length === 1 ? 'it' : 'them'} again.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn small ghost" data-act="wcall" data-v="known">I know all of them</button><button class="btn small ghost" data-act="wcall" data-v="learn">Teach me all</button></div>
+      <div class="wclist">${q.words.map((w) => { const it = vocabWord(w); return `<div class="wcrow" data-w="${w}"><div><b>${esc(w)}</b> <small class="muted">${{ a: 'adjective', v: 'verb', n: 'noun' }[it.pos]}</small></div>
+        <div class="seg" role="group" aria-label="${esc(w)}"><button data-act="wc" data-w="${w}" data-v="known" aria-pressed="false">I know it</button><button data-act="wc" data-w="${w}" data-v="learn" aria-pressed="false">Teach me</button></div></div>`; }).join('')}</div>` });
+  }
+  function wcPick(w, v) {
+    if (!L || !L.q || L.q.t !== 'wordcheck') return;
+    const set = (word) => { L.wc[word] = v; document.querySelectorAll(`.wcrow[data-w="${word}"] [data-act="wc"]`).forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === v)); };
+    if (w) set(w); else L.q.words.forEach(set);
+    const done = L.q.words.every((x) => L.wc[x]), c = $('#contbtn'); if (c) c.disabled = !done;
   }
   function teachCard(q) {
     const it = vocabWord(q.vw), pos = { a: 'adjective', v: 'verb', n: 'noun' }[it.pos];
@@ -1065,7 +1104,7 @@
       <div class="teach-def"><span class="lbl">Means</span>${esc(it.d)}</div>
       ${(() => { const v = vInfo(it.w); return (v.alts.length > 1 ? `<div class="teach-alt"><span class="lbl">Also put as</span>${v.alts.slice(1).map(esc).join(' \u00b7 ')}</div>` : '') + (v.syn.length ? `<div class="teach-alt"><span class="lbl">Similar words</span>${v.syn.map(esc).join(', ')}</div>` : ''); })()}
       <div class="passage">${esc(it.s).replace('___', `<b>${esc(it.w)}</b>`)}</div>
-      <p class="muted teach-note">New word ${q.n} of ${q.of}. You'll get a quick check on each new word, then the lesson starts.</p>` });
+      <p class="muted teach-note">Word ${q.n} of ${q.of} to learn. You'll get a quick check on each one, then the lesson starts.</p>` });
   }
 
   /* ACT "How to solve" guides: step-by-step cards before the first practice in each ACT skill. */
@@ -1083,12 +1122,18 @@
     syncHearts();
     if (!['speed', 'bell', 'weekly', 'section'].includes(mode) && S.settings.hearts && S.hearts <= 0) { heartsSheet(); return; }
     let queue = mode === 'section' ? buildSection(sid) : mode === 'bell' ? (bellToday() ? [] : buildBell()) : mode === 'weekly' ? (weekly().done ? [] : weekly().ids.filter((id) => !(id in S.weekly.ans)).map((id) => QS.find((q) => q.id === id)).filter(Boolean)) : buildQueue(mode, sid);
-    let learnEnd = 0;
-    if (!['bell', 'speed', 'weekly', 'section'].includes(mode) && queue.length) { const pre = learnPhase(queue); learnEnd = pre.length; queue = [...pre, ...queue]; }
+    let learnEnd = 0, pendingTeach = [];
+    const lessonWords = [...new Set(queue.flatMap(wordsOf))].filter((w) => vocabWord(w));
+    ALLOWED = new Set([...ALLW.filter((x) => isLearned(x.w)).map((x) => x.w), ...lessonWords]);
+    if (!['bell', 'speed', 'weekly', 'section'].includes(mode) && queue.length) {
+      const ask = lessonWords.filter(unasked); pendingTeach = lessonWords.filter(needsTeach);
+      const pre = ask.length ? [{ id: 'wordcheck', t: 'wordcheck', learn: true, s: queue[0].s, words: ask }] : teachPhase(pendingTeach);
+      learnEnd = pre.length; queue = [...pre, ...queue];
+    }
     const G = (window.INK_ACT_GUIDES || {})[sid];
     if (mode === 'skill' && G && queue.length && !S.guides[sid]) { const gc = guideCards(sid); learnEnd += gc.length; queue = [...gc, ...queue]; }
     if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'weekly') toast('This week\u2019s challenge is done. A new one starts Monday.', I.medal); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
-    L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false, learnEnd };
+    L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false, learnEnd, pendingTeach, wc: {} };
     if (mode === 'speed') L.speedEnd = Date.now() + SPEED_SECS * 1000;
     if (mode === 'skill' && !S.tried.includes(sid)) S.tried.push(sid);
     if (mode === 'unit') L.unit = sid;
@@ -1144,10 +1189,10 @@
     const skill = SKMAP[q.s], unit = UNMAP[skill.unit];
     const wrap = h('div', { class: 'qwrap' });
     const retry = L.retried.has(q.id) && L.first.has(q.id);
-    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, q.t === 'guide' ? 'How to solve' : q.t === 'teach' ? 'Learn it' : q.kind || KIND[q.t]),
+    wrap.append(h('div', { class: 'qtype' }, h('span', { class: 'kind' }, q.t === 'wordcheck' ? 'Word check' : q.t === 'guide' ? 'How to solve' : q.t === 'teach' ? 'Learn it' : q.kind || KIND[q.t]),
       h('span', { class: 'chip', style: `--uc:var(--${unit.color});--uc2:var(--${unit.color}b);background:var(--${unit.color});color:#fff` }, skill.name),
       retry ? h('span', { class: 'chip' }, 'Second try') : null,
-      q.learn ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, q.t === 'guide' ? 'Strategy' : 'New word') : null,
+      q.learn ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, q.t === 'guide' ? 'Strategy' : q.t === 'wordcheck' ? 'Vocabulary' : 'New word') : null,
       q.d === 3 ? h('span', { class: 'chip hardchip' }, 'Hard') : null,
       q.act ? h('span', { class: 'chip actchip' }, 'ACT') : null,
       qTimerOn(q) ? h('span', { class: 'qclock num', id: 'qclock', 'aria-label': 'Time for this question' }, fmtClock(paceFor(q) * 1000)) : null,
@@ -1171,14 +1216,14 @@
       submit: () => onCheck(),
       auto: (ok, answer) => resolve(ok, answer),
     };
-    if (q.t === 'teach' || q.t === 'guide') {
-      wrap.append(q.t === 'guide' ? h('div', { class: 'teach guide', html: `<h2 class="guide-h">${esc(q.g.h)}</h2><div class="ebody">${q.g.html}</div><p class="muted teach-note">Step ${q.n} of ${q.of}${q.n === q.of ? ' \u00b7 Next up: practice questions.' : ''}</p>` }) : teachCard(q));
+    if (q.t === 'teach' || q.t === 'guide' || q.t === 'wordcheck') {
+      wrap.append(q.t === 'wordcheck' ? wordCheckCard(q) : q.t === 'guide' ? h('div', { class: 'teach guide', html: `<h2 class="guide-h">${esc(q.g.h)}</h2><div class="ebody">${q.g.html}</div><p class="muted teach-note">Step ${q.n} of ${q.of}${q.n === q.of ? ' \u00b7 Next up: practice questions.' : ''}</p>` }) : teachCard(q));
       const old0 = body.querySelector('.qwrap');
       if (old0 && !calm()) { old0.classList.add('qout'); setTimeout(() => { if (L && L.q === q) { body.replaceChildren(wrap); body.scrollTop = 0; } }, 150); }
       else { body.replaceChildren(wrap); body.scrollTop = 0; }
       L.state = 'feedback'; L.w = null;
       foot.className = 'lesson-foot';
-      foot.innerHTML = `<div class="inner"><button class="btn" data-act="continue" id="contbtn">${q.t === 'guide' ? (q.n === q.of ? 'Start practice' : 'Next') : 'Got it'}</button></div>`;
+      foot.innerHTML = q.t === 'wordcheck' ? `<div class="inner"><button class="btn" data-act="continue" id="contbtn" disabled>Continue</button></div>` : `<div class="inner"><button class="btn" data-act="continue" id="contbtn">${q.t === 'guide' ? (q.n === q.of ? 'Start practice' : 'Next') : 'Got it'}</button></div>`;
       setTimeout(() => { const c = $('#contbtn'); if (c) c.focus({ preventScroll: true }); }, 30);
       updateLessonTop();
       return;
@@ -1230,6 +1275,11 @@
     }
     const first = !L.first.has(q.id);
     if (first) {
+      if (!ok && !q.learn) {
+        const base = q.base || q, ans = base.c && typeof base.c[base.a] === 'string' ? base.c[base.a].toLowerCase().trim() : '';
+        const missedW = [...new Set([...(q.vw ? [q.vw] : detectWords(base, true)), ...(vocabWord(ans) ? [ans] : [])])].filter(markReview);
+        L.reteach = missedW;
+      } else L.reteach = [];
       L.first.set(q.id, ok); if (L.mode === 'weekly') S.weekly.ans[q.id] = ok; else if (q.bell) bellGrade(q, ok); else grade(q, ok); S.totalAnswered++;
       if (ok) { S.totalCorrect++; S.daily.correct++; if (MATH.has(q.s)) S.daily.math++; }
     }
@@ -1271,6 +1321,7 @@
           ${!ok && answer ? `<p class="ans">Correct answer: ${esc(strip(answer))}</p>` : ''}
           <p>${esc(q.e)}</p>
           ${willRetry ? '<p class="muted">You’ll see this one again at the end of the lesson.</p>' : ''}
+          ${!ok && L.reteach && L.reteach.length ? `<p class="muted">We\u2019ll reteach <b>${L.reteach.map(esc).join(', ')}</b> before your next lesson.</p>` : ''}
           ${!ok && L.mode === 'bell' ? '<p class="muted">The original question is back in \u201cFix your mistakes\u201d in 10 minutes.</p>' : ''}
         </div>
       </div>
@@ -1280,7 +1331,7 @@
 
   function resolveLearn(q, ok, answer) {
     L.w.reveal(ok);
-    if (ok) { L.done++; sfx.ok(); if (!isLearned(q.vw)) S.learned.push(q.vw); save(); }
+    if (ok) { L.done++; sfx.ok(); if (!S.learned.includes(q.vw)) S.learned.push(q.vw); S.wordKnow[q.vw] = 'learned'; save(); }
     else { sfx.no(); L.queue.splice(L.learnEnd, 0, q); L.learnEnd++; }
     updateLessonTop();
     const foot = $('#lfoot');
@@ -1316,7 +1367,14 @@
     if (!L || L.state !== 'feedback') return;
     if (L.mode === 'speed' && Date.now() >= L.speedEnd) { finishLesson(); return; }
     if (L.mode !== 'speed' && L.mode !== 'bell' && L.mode !== 'weekly' && S.settings.hearts && S.hearts <= 0) { finishLesson(true); return; }
-    if (L.q && (L.q.t === 'teach' || L.q.t === 'guide')) L.done++;
+    if (L.q && L.q.t === 'wordcheck') {
+      if (!L.q.words.every((w) => L.wc[w])) return;
+      const toLearn = [];
+      for (const w of L.q.words) { if (L.wc[w] === 'known') S.wordKnow[w] = 'known'; else { S.wordKnow[w] = 'learn'; toLearn.push(w); } }
+      const tp = teachPhase([...L.pendingTeach, ...toLearn]);
+      L.queue.splice(L.idx + 1, 0, ...tp); L.total += tp.length; L.learnEnd = L.idx + 1 + tp.length; save();
+    }
+    if (L.q && (L.q.t === 'teach' || L.q.t === 'guide' || L.q.t === 'wordcheck')) L.done++;
     if (L.q && L.q.t === 'guide' && L.q.n === L.q.of) { S.guides[L.q.s] = true; save(); }
     L.idx++;
     if (L.idx >= L.queue.length) finishLesson(); else showQuestion();
@@ -1923,7 +1981,7 @@
         <div class="field"><span class="hint">Progress is saved in this browser only. To move it to another device, copy a backup code here and paste it there.</span>
           <div class="row" style="flex-wrap:wrap"><button class="btn small ghost" data-act="export">Copy backup code</button><button class="btn small ghost" data-act="import">Restore from code</button></div>
           <textarea id="backup" aria-label="Backup code" placeholder="Backup code appears here, or paste one to restore"></textarea></div>
-        <div class="field"><span class="lbl">Relearn vocab</span><span class="hint">Every vocab word gets taught again from its \u201cLearn it\u201d card. Clears your vocab question history only; XP, gems, and badges stay.</span><div id="relearnbox"><button class="btn small" data-act="relearn1">Relearn all words</button></div></div>
+        <div class="field"><span class="lbl">Relearn vocab</span><span class="hint">Your words: ${ALLW.filter((x) => isLearned(x.w)).length} known, ${ALLW.filter((x) => needsTeach(x.w)).length} to learn or review, ${ALLW.filter((x) => unasked(x.w)).length} not asked yet (of ${ALLW.length}). Every vocab word gets taught again from its \u201cLearn it\u201d card. Clears your vocab question history only; XP, gems, and badges stay.</span><div id="relearnbox"><button class="btn small" data-act="relearn1">Relearn all words</button></div></div>
         <div class="field"><span class="lbl">Start over</span><span class="hint">Erases all XP, streaks, gems, and question history in this browser.</span><div id="resetbox"><button class="btn small bad" data-act="reset1">Reset progress</button></div></div>
       </div>
       <p class="muted" style="font-size:13px">Inkwell is an independent study tool with original practice questions. It isn’t affiliated with the College Board.</p>`;
@@ -1989,6 +2047,8 @@
       case 'quit': if (L && L.ended) endLesson(); else quitSheet(); break;
       case 'quitnow': closeSheet(); if (L && (L.mode === 'weekly' || L.mode === 'section')) finishLesson(); else endLesson(); break;
       case 'section': startLesson('section', t.dataset.sec); break;
+      case 'wc': wcPick(t.dataset.w, t.dataset.v); break;
+      case 'wcall': wcPick(null, t.dataset.v); break;
       case 'guide': guideSheet(t.dataset.skill); break;
       case 'secskip': if (L && L.state === 'answer') { const { answer } = L.w.check(); resolve(false, answer); } break;
       case 'exam': S.settings.exam = t.dataset.v; save(); renderView(); break;

@@ -1,6 +1,6 @@
 /* Offline cache for Inkwell. Bump VERSION whenever you change a file so phones pick up the update. */
-const VERSION = 'inkwell-v15';
-const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'fx.js', 'questions.js', 'questions-pt1.js', 'questions-more.js', 'questions-genres.js', 'questions-extra.js', 'vocab.js', 'vocab-variants.js', 'essay.js', 'questions-hard.js', 'questions-act.js', 'questions-act2.js', 'act-guides.js', 'icon.svg', 'manifest.webmanifest'];
+const VERSION = 'inkwell-v16';
+const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'fx.js', 'questions.js', 'questions-pt1.js', 'questions-more.js', 'questions-genres.js', 'questions-extra.js', 'vocab.js', 'vocab-variants.js', 'vocab-glossary.js', 'essay.js', 'questions-hard.js', 'questions-act.js', 'questions-act2.js', 'act-guides.js', 'icon.svg', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

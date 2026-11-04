@@ -954,3 +954,8 @@ svg.mascot.petted { animation: pet .6s var(--spring); transform-origin: 50% 90%;
 .teach.guide .ebody li { margin: 5px 0; }
 .teach.guide .passage { margin: 6px 0; }
 .teach.guide .etable td, .teach.guide .etable th { font-size: 14px; }
+
+/* Word check */
+.wclist { display: grid; gap: 8px; }
+.wcrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.wcrow b { font-size: 18px; }
