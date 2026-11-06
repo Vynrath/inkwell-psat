@@ -881,7 +881,13 @@
   const otherWordsAny = (it, n) => shuffle((window.INK_WORDS || []).filter((x) => x.pos === it.pos && !nearW(x.w, it.w))).slice(0, n);
   const otherWords = (it, n) => shuffle(ALLW.filter((x) => x.pos === it.pos && !nearW(x.w, it.w) && (!ALLOWED || ALLOWED.has(x.w)))).slice(0, n);
   const defOf = (x) => { const v = vInfo(x.w); return v ? rnd1(v.alts) : x.d; };
-  const vExplain = (it) => `${capW(it.w)} means ${it.d}${it.syn.length ? ` (similar words: ${it.syn.join(', ')})` : ''}.`;
+  const WX = () => window.INK_WORD_EXPLAIN || {};
+  const vExplain = (it) => `${capW(it.w)} means ${it.d}${it.syn.length ? ` (similar words: ${it.syn.join(', ')})` : ''}.${WX()[it.w] ? '\n' + WX()[it.w] : ''}`;
+  /* Full, step-by-step explanations (explanations.js) replace the short built-in ones wherever a question is answered. */
+  const EXPL = () => window.INK_EXPLAIN || {};
+  const explainText = (q) => { if (q.bell || q.vw || (q.id || '').startsWith('vw-')) return q.e || ''; const b = q.base || q; return EXPL()[b.id] || q.e || ''; };
+  const ELBL = /^(Correct|Answer|Why not the others|Why|Tip|Rule|Remember|Note|Trap|Check|Shortcut|Idea|Order|Steps?(?: \d+)?|Common mistakes?|Key idea|Formula|Pattern|Test|Also|Example|Compare|Science fact|Positive|Negative|Supports|Weakens|Specific|Vague|Text [12]|Kant|Later critics|Still the same ship|Not the same ship|Push factors[^:]*|Pull factors[^:]*|Mean|Median|Numbers|[xy]|Case \d|Row \d[^:]*|First draw blue|Second draw blue|Both|Assumption|Study|Recommendation|Tradition|Break|Reaction|Puzzle|Problem|Earlier solution|New solution|Total|Time going|Time returning|Doubled|Odd|Even)(?=:)/;
+  const fmtE = (t) => String(t || '').split('\n').filter((x) => x.trim()).map((line) => { const m = line.match(ELBL); return `<p class="eline">${m ? `<b>${esc(m[0])}:</b>${esc(line.slice(m[0].length + 1))}` : esc(line)}</p>`; }).join('');
   /* Second wording for every non-vocab question (questions-alt.js). The original shows the first time,
      the reworded version the next, and so on. A retry in the same lesson gets the other version. */
   function altVersion(q) {
@@ -920,6 +926,12 @@
       e: right ? `Yes. ${expl}` : `No, that\u2019s a close-sounding trap. ${expl}` };
   }
   function bellVariant(q, r) {
+    const v = bellVariant0(q, r); if (!v || q.vw) return v;
+    const full = EXPL()[q.id]; if (!full || !q.e) return v;
+    const pre = v.e && v.e.endsWith(q.e) ? v.e.slice(0, v.e.length - q.e.length).trim() : '';
+    return { ...v, e: pre ? `${pre}\n${full}` : full };
+  }
+  function bellVariant0(q, r) {
     const pickOne = (arr) => arr[Math.floor(r() * arr.length)];
     const base = { id: 'bell-' + q.id, s: q.s, orig: q.id, origType: q.t, bell: true, tbl: q.tbl, bars: q.bars, graph: q.graph, src: q.src, tq: q.tq };
     const YN = ['Yes', 'No'];
@@ -1088,7 +1100,7 @@
       const opts = [...others.filter((x) => words.includes(x)), ...others.filter((x) => !words.includes(x) && x.pos === it.pos), ...others].filter((x, i, a) => a.indexOf(x) === i).slice(0, 3);
       return { id: 'learncheck-' + it.w, t: 'mc', learn: true, s: it.sid, vw: it.w, kind: 'Quick check',
         q: `What does <b>${it.w}</b> mean?`, c: [rnd1(vInfo(it.w).alts), ...opts.map((x) => x.d)], a: 0,
-        e: `${it.w[0].toUpperCase() + it.w.slice(1)} means ${it.d}. ${it.s.replace('___', it.w)}` };
+        e: `${it.w[0].toUpperCase() + it.w.slice(1)} means ${it.d}. Example: ${it.s.replace('___', it.w)}${WX()[it.w] ? '\n' + WX()[it.w] : ''}` };
     });
     return [...teach, ...checks];
   }
@@ -1112,14 +1124,16 @@
       <div class="teach-word">${esc(it.w)}<span class="teach-pos">${pos}</span></div>
       <div class="teach-def"><span class="lbl">Means</span>${esc(it.d)}</div>
       ${(() => { const v = vInfo(it.w); return (v.alts.length > 1 ? `<div class="teach-alt"><span class="lbl">Also put as</span>${v.alts.slice(1).map(esc).join(' \u00b7 ')}</div>` : '') + (v.syn.length ? `<div class="teach-alt"><span class="lbl">Similar words</span>${v.syn.map(esc).join(', ')}</div>` : ''); })()}
+      ${WX()[it.w] ? `<div class="teach-alt teach-more"><span class="lbl">In plain words</span>${esc(WX()[it.w])}</div>` : ''}
       <div class="passage">${esc(it.s).replace('___', `<b>${esc(it.w)}</b>`)}</div>
       <p class="muted teach-note">Word ${q.n} of ${q.of} to learn. You'll get a quick check on each one, then the lesson starts.</p>` });
   }
 
-  /* ACT "How to solve" guides: step-by-step cards before the first practice in each ACT skill. */
-  const guideCards = (sid) => (window.INK_ACT_GUIDES[sid] || []).map((g, i, all) => ({ id: `guide-${sid}-${i}`, t: 'guide', learn: true, s: sid, g, n: i + 1, of: all.length }));
+  /* "How to solve" guides (SAT + ACT): step-by-step cards before the first practice in each skill. */
+  const GUIDES = () => ({ ...(window.INK_SAT_GUIDES || {}), ...(window.INK_ACT_GUIDES || {}) });
+  const guideCards = (sid) => (GUIDES()[sid] || []).map((g, i, all) => ({ id: `guide-${sid}-${i}`, t: 'guide', learn: true, s: sid, g, n: i + 1, of: all.length }));
   function guideSheet(sid) {
-    const G = (window.INK_ACT_GUIDES || {})[sid]; if (!G) return;
+    const G = GUIDES()[sid]; if (!G) return;
     const sk = SKMAP[sid], u = UNMAP[sk.unit];
     openSheet(`<div class="top"><div class="icon">${esc(sk.icon)}</div><div><div class="eyebrow">How to solve</div><h2>${esc(sk.name)}</h2></div></div>
       ${G.map((g, i) => `<details class="eguide"${i < 2 ? ' open' : ''}><summary>${i + 1}. ${esc(g.h)}</summary><div class="ebody">${g.html}</div></details>`).join('')}
@@ -1139,7 +1153,7 @@
       const pre = ask.length ? [{ id: 'wordcheck', t: 'wordcheck', learn: true, s: queue[0].s, words: ask }] : teachPhase(pendingTeach);
       learnEnd = pre.length; queue = [...pre, ...queue];
     }
-    const G = (window.INK_ACT_GUIDES || {})[sid];
+    const G = GUIDES()[sid];
     if (mode === 'skill' && G && queue.length && !S.guides[sid]) { const gc = guideCards(sid); learnEnd += gc.length; queue = [...gc, ...queue]; }
     if (!queue.length) { if (mode === 'skill') skillSheet(sid); else if (mode === 'unit') unitSheet(sid); else if (mode === 'weekly') toast('This week\u2019s challenge is done. A new one starts Monday.', I.medal); else if (mode === 'bell') toast(bellToday() ? 'Today\u2019s Bell Ringer is done. A new one starts at midnight.' : 'Answer at least 3 questions to unlock the Bell Ringer.', I.bell); else toast('Nothing is ready in that mode right now.', I.clock); return; }
     L = { mode, sid, queue, total: queue.length, idx: 0, done: 0, retried: new Set(), first: new Map(), combo: 0, maxCombo: 0, xp: 0, start: Date.now(), state: 'answer', speedScore: 0, ended: false, learnEnd, pendingTeach, wc: {} };
@@ -1329,7 +1343,7 @@
         <div>
           <h3>${ok ? pick(PRAISE) : L.timedOut ? 'Time\u2019s up.' : pick(OOPS)}</h3>
           ${!ok && answer ? `<p class="ans">Correct answer: ${esc(strip(answer))}</p>` : ''}
-          <p>${esc(q.e)}</p>
+          <div class="expl">${fmtE(explainText(q))}</div>
           ${willRetry ? '<p class="muted">You’ll see this one again at the end of the lesson.</p>' : ''}
           ${!ok && L.reteach && L.reteach.length ? `<p class="muted">We\u2019ll reteach <b>${L.reteach.map(esc).join(', ')}</b> before your next lesson.</p>` : ''}
           ${!ok && L.mode === 'bell' ? '<p class="muted">The original question is back in \u201cFix your mistakes\u201d in 10 minutes.</p>' : ''}
@@ -1352,7 +1366,7 @@
         <div>
           <h3>${ok ? pick(PRAISE) : pick(OOPS)}</h3>
           ${!ok && answer ? `<p class="ans">Correct answer: ${esc(strip(answer))}</p>` : ''}
-          <p>${esc(q.e)}</p>
+          <div class="expl">${fmtE(explainText(q))}</div>
           ${ok ? '' : '<p class="muted">This was just a practice check, so no heart lost. You\u2019ll try it again before the lesson starts.</p>'}
         </div>
       </div>
@@ -1463,7 +1477,7 @@
       const missed = L.review.filter((r) => !r.ok), skipped = L.queue.filter((q) => !L.first.has(q.id));
       if (missed.length || skipped.length) body.insertAdjacentHTML('beforeend', `<div class="secreview"><h2>Review</h2>${[...missed.map((r) => ({ q: r.q, answer: r.answer })), ...skipped.map((q) => ({ q, answer: null, skipped: true }))].map((r, i) => {
         const q = r.q, ans = r.answer || (q.c ? q.c[q.a] : q.a ? q.a[0] : '');
-        return `<details class="eguide"><summary>${i + 1}. ${esc(strip(q.q || q.p || '').slice(0, 90))}\u2026${r.skipped ? ' <small class="muted">(not reached)</small>' : ''}</summary><div class="ebody">${q.p ? `<div class="passage" style="max-height:220px;overflow:auto">${q.p}</div>` : ''}${q.q ? `<p><b>${q.q}</b></p>` : ''}<p class="ans"><b>Correct answer:</b> ${esc(strip(String(ans)))}</p><p>${esc(q.e)}</p></div></details>`; }).join('')}</div>`);
+        return `<details class="eguide"><summary>${i + 1}. ${esc(strip(q.q || q.p || '').slice(0, 90))}\u2026${r.skipped ? ' <small class="muted">(not reached)</small>' : ''}</summary><div class="ebody">${q.p ? `<div class="passage" style="max-height:220px;overflow:auto">${q.p}</div>` : ''}${q.q ? `<p><b>${q.q}</b></p>` : ''}<p class="ans"><b>Correct answer:</b> ${esc(strip(String(ans)))}</p><div class="expl">${fmtE(explainText(q))}</div></div></details>`; }).join('')}</div>`);
     }
     body.querySelectorAll('[data-count]').forEach((el, i) => { const n = +el.dataset.count, p = el.dataset.prefix || ''; el.textContent = p + '0'; setTimeout(() => countUp(el, n, 800, p), 350 + i * 120); });
     foot.className = 'lesson-foot';
@@ -1514,8 +1528,8 @@
       <div class="top"><div class="icon">${esc(sk.icon)}</div><div><div class="eyebrow">${esc(u.name)}</div><h2>${esc(sk.name)}</h2></div></div>
       <div class="kv"><div><b>${st.ready}</b><span>Ready now</span></div><div><b>${st.mast}/${st.total}</b><span>Mastered</span></div><div><b>${st.acc == null ? '–' : Math.round(st.acc * 100) + '%'}</b><span>Accuracy</span></div></div>
       <div class="bar good" aria-label="Skill mastery"><i style="width:${Math.round(st.pct * 100)}%"></i></div>
-      <div class="tipline"><b>Tip:</b> ${esc(sk.tip)}</div>
-      ${(window.INK_ACT_GUIDES || {})[sid] ? `<button class="btn ghost block" data-act="guide" data-skill="${sid}">How to solve these questions${S.guides[sid] ? '' : ' (shown before your first lesson)'}</button>` : ''}
+      <div class="tipline"><b>Tip:</b> ${esc((window.INK_TIPS || {})[sid] || sk.tip)}</div>
+      ${GUIDES()[sid] ? `<button class="btn ghost block" data-act="guide" data-skill="${sid}">How to solve these questions${S.guides[sid] ? '' : ' (shown before your first lesson)'}</button>` : ''}
       ${body}
       <p class="muted" style="margin:0;font-size:14px">Questions you get right rest for 1 day, then 3, 7, 16, and 35 days. Missed questions come back after 10 minutes.</p>`, `var(--${u.color});--uc2:var(--${u.color}b)`);
   }

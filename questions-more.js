@@ -318,7 +318,7 @@ window.INK_QUESTIONS.push(
   for (let i = 1; i <= 5; i++) {
     const a = ri(2, 9), x = ri(-6, 12), b = ri(-15, 20), c = a * x + b;
     add({ id: `g-lin-eq${i}`, s: 'lin', t: 'input', q: `If ${a}x ${signed(b)} = ${neg(c)}, what is the value of x?`, a: [String(x)],
-      e: `Subtract ${neg(b)} from both sides: ${a}x = ${neg(c - b)}. Divide by ${a}: x = ${neg(x)}.` });
+      e: `Answer: ${neg(x)}. Undo the operations in reverse order.\nStep 1: ${b < 0 ? `add ${Math.abs(b)} to` : `subtract ${b} from`} both sides: ${a}x = ${neg(c)} ${b < 0 ? '+ ' + Math.abs(b) : '− ' + b} = ${neg(c - b)}.\nStep 2: divide both sides by ${a}: x = ${neg(c - b)} ÷ ${a} = ${neg(x)}.\nCheck: ${a}(${neg(x)}) ${signed(b)} = ${neg(c)} ✓` });
   }
   // Linear: slope from two points
   for (let i = 1; i <= 4; i++) {
@@ -326,39 +326,39 @@ window.INK_QUESTIONS.push(
     const x1 = ri(-4, 3), dx = ri(1, 5), y1 = ri(-6, 6), x2 = x1 + dx, y2 = y1 + m * dx;
     add({ id: `g-lin-slope${i}`, s: 'lin', t: 'mc', q: `A line passes through (${neg(x1)}, ${neg(y1)}) and (${neg(x2)}, ${neg(y2)}). What is its slope?`,
       c: uniq(neg(m), [neg(-m), frac(1, m), neg(m * dx)]), a: 0,
-      e: `Slope = (${neg(y2)} − ${y1 < 0 ? '(' + neg(y1) + ')' : y1}) ÷ (${neg(x2)} − ${x1 < 0 ? '(' + neg(x1) + ')' : x1}) = ${neg(m * dx)} ÷ ${dx} = ${neg(m)}.` });
+      e: `Correct: ${neg(m)}. Slope = (change in y) ÷ (change in x) = (y₂ − y₁) ÷ (x₂ − x₁).\nChange in y: ${neg(y2)} − ${y1 < 0 ? '(' + neg(y1) + ')' : y1} = ${neg(m * dx)}. Change in x: ${neg(x2)} − ${x1 < 0 ? '(' + neg(x1) + ')' : x1} = ${dx}.\nSlope = ${neg(m * dx)} ÷ ${dx} = ${neg(m)}.\nTraps: stopping at the change in y (${neg(m * dx)}) without dividing, dividing the other way (change in x ÷ change in y), or subtracting in a different order on top and bottom, which flips the sign.` });
   }
   // Linear: fee + rate word problems
   const things = [['A streaming service', 'sign-up fee', 'per month', 'months'], ['A climbing gym', 'membership fee', 'per visit', 'visits'], ['A bike rental shop', 'deposit', 'per hour', 'hours'], ['A tutoring center', 'registration fee', 'per session', 'sessions']];
   things.forEach(([who, fee, per, unit], k) => {
     const f = ri(10, 40), rate = ri(5, 25), n = ri(3, 12), total = f + rate * n;
     add({ id: `g-lin-word${k + 1}`, s: 'lin', t: 'input', q: `${who} charges a $${f} ${fee} plus $${rate} ${per}. A customer paid $${total} in total. How many ${unit} did they pay for?`, a: [String(n)],
-      e: `${f} + ${rate}n = ${total}, so ${rate}n = ${total - f} and n = ${n}.` });
+      e: `Answer: ${n}. The one-time ${fee} ($${f}) is paid once; the $${rate} is paid for each of the n ${unit}. So the total is ${f} + ${rate}n = ${total}.\nStep 1: subtract the one-time fee: ${rate}n = ${total} − ${f} = ${total - f}.\nStep 2: divide by the rate: n = ${total - f} ÷ ${rate} = ${n}.\nCheck: ${f} + ${rate} × ${n} = ${total} ✓` });
   });
   // Linear: inequalities with a negative coefficient
   for (let i = 1; i <= 3; i++) {
     const a = ri(2, 6), k = ri(-5, 6), b = -a * k;
     add({ id: `g-lin-ineq${i}`, s: 'lin', t: 'mc', q: `Which inequality is equivalent to −${a}x > ${neg(b)}?`,
       c: [`x < ${neg(k)}`, `x > ${neg(k)}`, `x < ${neg(-k)}`, `x > ${neg(-k)}`].filter((v, j, arr) => arr.indexOf(v) === j).concat(k === 0 ? ['x ≤ 0', 'x ≥ 0'] : []).slice(0, 4), a: 0,
-      e: `Divide both sides by −${a} and flip the sign: x < ${neg(k)}.` });
+      e: `Correct: x < ${neg(k)}. To get x alone, divide both sides by −${a}. Dividing (or multiplying) an inequality by a negative number reverses the inequality sign, so > becomes <: x < ${neg(b)} ÷ (−${a}) = ${neg(k)}.\nTrap: x > ${neg(k)} forgets to flip the sign. Check with a number: x = ${neg(k - 1)} gives −${a}(${neg(k - 1)}) = ${neg(-a * (k - 1))}, which is greater than ${neg(b)} ✓` });
   }
 
   // Expressions: substitution
   for (let i = 1; i <= 4; i++) {
     const s = ri(3, 12), m = ri(2, 6), c = ri(-9, 9);
     add({ id: `g-exp-sub${i}`, s: 'exp', t: 'input', q: `If a + b = ${s}, what is the value of ${m}a + ${m}b ${signed(c)}?`, a: [String(m * s + c)],
-      e: `${m}a + ${m}b = ${m}(a + b) = ${m} · ${s} = ${m * s}, and ${m * s} ${signed(c)} = ${neg(m * s + c)}.` });
+      e: `Answer: ${neg(m * s + c)}. You can’t find a and b separately, and you don’t need to. Factor out ${m}: ${m}a + ${m}b = ${m}(a + b).\nSubstitute a + b = ${s}: ${m} × ${s} = ${m * s}.\nThen ${m * s} ${signed(c)} = ${neg(m * s + c)}.\nTip: look for the given expression (a + b) hiding inside the new one.` });
   }
   for (let i = 1; i <= 3; i++) {
     const rr = ri(2, 6), k = ri(2, 4), l = ri(1, 3), num = k * l * ri(1, 3);
     add({ id: `g-exp-ratio${i}`, s: 'exp', t: 'input', q: `If x/y = ${rr}, what is the value of ${num}x/${l === 1 ? 'y' : `(${l}y)`}?`, a: [String((num / l) * rr)],
-      e: `${num}x/${l === 1 ? 'y' : `(${l}y)`} = (${num}/${l}) · (x/y) = ${num / l} · ${rr} = ${(num / l) * rr}.` });
+      e: `Answer: ${(num / l) * rr}. Separate the numbers from the x/y part: ${num}x/${l === 1 ? 'y' : `(${l}y)`} = (${num}/${l}) · (x/y) = ${num / l} · (x/y).\nSubstitute x/y = ${rr}: ${num / l} × ${rr} = ${(num / l) * rr}.\nTip: you never need x and y separately; the ratio x/y is all you need.` });
   }
   for (let i = 1; i <= 3; i++) {
     const a = ri(2, 5), b = ri(2, 6), c = ri(1, 9), d = ri(1, 7), co = a * b + d, k = -a * c;
     add({ id: `g-exp-dist${i}`, s: 'exp', t: 'mc', q: `Which expression is equivalent to ${a}(${b}x − ${c}) + ${d}x?`,
       c: uniq(`${co}x ${signed(k)}`, [`${a * b}x ${signed(k)}`, `${co}x − ${c}`, `${b + d}x ${signed(k)}`]), a: 0,
-      e: `Distribute: ${a * b}x − ${a * c}, then add ${d}x: ${co}x − ${a * c}.` });
+      e: `Correct: ${co}x − ${a * c}.\nStep 1: distribute the ${a} to both terms inside the parentheses: ${a} · ${b}x = ${a * b}x and ${a} · ${c} = ${a * c}, giving ${a * b}x − ${a * c}.\nStep 2: combine like terms: ${a * b}x + ${d}x = ${co}x.\nTraps: forgetting to add the ${d}x, or multiplying only the first term by ${a} (leaving − ${c}).` });
   }
 
   // Statistics
@@ -367,43 +367,43 @@ window.INK_QUESTIONS.push(
     for (let j = 0; j < n - 1; j++) vals.push(mean + ri(-5, 5));
     vals.push(mean * n - vals.reduce((x, y) => x + y, 0));
     add({ id: `g-sta-mean${i}`, s: 'sta', t: 'input', q: `What is the mean of ${vals.join(', ')}?`, a: [String(mean)],
-      e: `The sum is ${mean * n}, and ${mean * n} ÷ ${n} = ${mean}.` });
+      e: `Answer: ${mean}. Mean = sum of the values ÷ number of values.\nSum: ${vals.join(' + ')} = ${mean * n}.\nCount: ${n} values.\nMean: ${mean * n} ÷ ${n} = ${mean}.` });
   }
   for (let i = 1; i <= 3; i++) {
     const vals = Array.from({ length: 7 }, () => ri(1, 40)); const sorted = vals.slice().sort((x, y) => x - y);
     add({ id: `g-sta-med${i}`, s: 'sta', t: 'input', q: `What is the median of ${vals.join(', ')}?`, a: [String(sorted[3])],
-      e: `In order: ${sorted.join(', ')}. The middle (4th) value is ${sorted[3]}.` });
+      e: `Answer: ${sorted[3]}. The median is the middle value after putting the data in order. Always sort first; the middle of the unsorted list is a trap.\nIn order: ${sorted.join(', ')}.\nWith 7 values, the middle one is the 4th: ${sorted[3]} (three values below it, three above).` });
   }
   for (let i = 1; i <= 3; i++) {
     const p = [4, 6, 8, 12, 15, 25, 35][ri(0, 6)], up = r() < 0.6;
     const k = up ? (100 + p) / 100 : (100 - p) / 100;
     add({ id: `g-sta-pct${i}`, s: 'sta', t: 'mc', q: `A price ${up ? 'increases' : 'decreases'} by ${p}%. The new price is k times the old price. What is k?`,
       c: uniq(String(k), [String(p / 100), String(up ? (100 - p) / 100 : (100 + p) / 100), String(p)]), a: 0,
-      e: `${up ? 'An increase' : 'A decrease'} of ${p}% means multiplying by 1 ${up ? '+' : '−'} ${p / 100} = ${k}.` });
+      e: `Correct: ${k}. The new price is the old price ${up ? 'plus' : 'minus'} ${p}% of it, which is ${up ? 100 + p : 100 - p}% of the old price. As a decimal, ${up ? 100 + p : 100 - p}% = ${k}, so new = ${k} × old.\nTraps: ${p / 100} is only the amount of the change, not the new total; ${up ? (100 - p) / 100 : (100 + p) / 100} goes the wrong direction; and ${p} forgets to convert the percent to a decimal.` });
   }
   for (let i = 1; i <= 3; i++) {
     const p = [10, 20, 25, 30, 40, 60, 75][ri(0, 6)], n = ri(2, 16) * 20;
     add({ id: `g-sta-of${i}`, s: 'sta', t: 'input', q: `What is ${p}% of ${n}?`, a: [String((p * n) / 100)],
-      e: `${p}% = ${p / 100}, and ${p / 100} × ${n} = ${(p * n) / 100}.` });
+      e: `Answer: ${(p * n) / 100}. “Of” means multiply. Convert the percent to a decimal by dividing by 100: ${p}% = ${p / 100}.\nThen ${p / 100} × ${n} = ${(p * n) / 100}.\nCheck: 10% of ${n} is ${n / 10}, so ${p}% is ${p / 10} × ${n / 10} = ${(p * n) / 100} ✓` });
   }
 
   // Advanced math
   for (let i = 1; i <= 4; i++) {
     const a = ri(2, 5), b = ri(-12, 12), x = ri(-4, 5);
     add({ id: `g-adv-eval${i}`, s: 'adv', t: 'input', q: `If f(x) = ${a}x² ${signed(b)}, what is f(${neg(x)})?`, a: [String(a * x * x + b)],
-      e: `${a}(${neg(x)})² ${signed(b)} = ${a} · ${x * x} ${signed(b)} = ${neg(a * x * x + b)}.` });
+      e: `Answer: ${neg(a * x * x + b)}. Replace every x with ${neg(x)}: f(${neg(x)}) = ${a}(${neg(x)})² ${signed(b)}.\nStep 1: square first (exponents before multiplying): (${neg(x)})² = ${x * x}${x < 0 ? ' (a negative number squared is positive)' : ''}.\nStep 2: multiply: ${a} × ${x * x} = ${a * x * x}.\nStep 3: ${a * x * x} ${signed(b)} = ${neg(a * x * x + b)}.` });
   }
   for (let i = 1; i <= 3; i++) {
     let p = ri(-7, 7), q = ri(-7, 7); if (p === q) q = p + 3; if (p === -q) q = q + 1;
     const B = -(p + q), C = p * q;
     add({ id: `g-adv-roots${i}`, s: 'adv', t: 'mc', q: `What are the solutions to x² ${signed(B)}x ${signed(C)} = 0?`.replace('+ 1x', '+ x').replace('− 1x', '− x').replace(' + 0x', ''),
       c: uniq(`${neg(Math.min(p, q))} and ${neg(Math.max(p, q))}`, [`${neg(-Math.max(p, q))} and ${neg(-Math.min(p, q))}`, `${neg(Math.min(p, q) - 1)} and ${neg(Math.max(p, q) + 1)}`, `${neg(B)} and ${neg(C)}`]), a: 0,
-      e: `Factor: (x ${signed(-p)})(x ${signed(-q)}) = 0, so x = ${neg(p)} or x = ${neg(q)}.` });
+      e: `Correct: ${neg(Math.min(p, q))} and ${neg(Math.max(p, q))}. To factor x² ${signed(B)}x ${signed(C)}, find two numbers that multiply to ${neg(C)} and add to ${neg(B)}: those are ${neg(-p)} and ${neg(-q)}.\nSo the equation is (x ${signed(-p)})(x ${signed(-q)}) = 0. A product is 0 when either factor is 0, so x = ${neg(p)} or x = ${neg(q)}.\nTrap: the numbers inside the parentheses (${neg(-p)} and ${neg(-q)}) are not the solutions; their signs flip.` });
   }
   for (let i = 1; i <= 3; i++) {
     const a = [-4, -3, -2, -1, 1, 2, 3][ri(0, 6)], h = ri(-5, 6), b = -2 * a * h, c = ri(-20, 20);
     add({ id: `g-adv-vertex${i}`, s: 'adv', t: 'input', q: `What is the x-coordinate of the vertex of y = ${a === 1 ? '' : a === -1 ? '−' : neg(a)}x² ${signed(b)}x ${signed(c)}?`.replace(' + 0x', ''), a: [String(h)],
-      e: `x = −b/(2a) = ${neg(-b)}/${neg(2 * a)} = ${neg(h)}.` });
+      e: `Answer: ${neg(h)}. For a parabola y = ax² + bx + c, the vertex is at x = −b/(2a).\nHere a = ${neg(a)} and b = ${neg(b)}, so x = −(${neg(b)}) ÷ (2 × ${neg(a)}) = ${neg(-b)} ÷ ${neg(2 * a)} = ${neg(h)}.\nTip: the vertex is the highest or lowest point; its x-value is also halfway between the parabola’s x-intercepts.` });
   }
 
   // Geometry
@@ -413,22 +413,22 @@ window.INK_QUESTIONS.push(
     add({ id: `g-geo-pyth${k + 1}`, s: 'geo', t: 'input',
       q: findLeg ? `A right triangle has a hypotenuse of ${H} and one leg of ${A}. What is the length of the other leg?` : `A right triangle has legs of ${A} and ${B}. What is the length of the hypotenuse?`,
       a: [String(findLeg ? B : H)],
-      e: findLeg ? `${H}² − ${A}² = ${H * H - A * A}, and √${H * H - A * A} = ${B}.` : `${A}² + ${B}² = ${A * A + B * B}, and √${A * A + B * B} = ${H}.` });
+      e: findLeg ? `Answer: ${B}. Use the Pythagorean theorem: leg² + leg² = hypotenuse². Since you know the hypotenuse, subtract: other leg² = ${H}² − ${A}² = ${H * H} − ${A * A} = ${H * H - A * A}.\nSo the other leg = √${H * H - A * A} = ${B}.\nShortcut: ${s > 1 ? `this is the ${p}-${q}-${h} triple multiplied by ${s}` : `${p}-${q}-${h} is a common Pythagorean triple worth memorizing`}.\nTrap: adding the squares instead of subtracting (that’s only for finding the hypotenuse).` : `Answer: ${H}. Use the Pythagorean theorem: leg² + leg² = hypotenuse².\n${A}² + ${B}² = ${A * A} + ${B * B} = ${A * A + B * B}, so the hypotenuse = √${A * A + B * B} = ${H}.\nShortcut: ${s > 1 ? `this is the ${p}-${q}-${h} triple multiplied by ${s}` : `${p}-${q}-${h} is a common Pythagorean triple worth memorizing`}.` });
   });
   for (let i = 1; i <= 3; i++) {
     const x = ri(25, 80), y = ri(20, 155 - x);
     add({ id: `g-geo-angle${i}`, s: 'geo', t: 'input', q: `Two angles of a triangle measure ${x}° and ${y}°. What is the measure, in degrees, of the third angle?`, a: [String(180 - x - y)],
-      e: `180 − ${x} − ${y} = ${180 - x - y}.` });
+      e: `Answer: ${180 - x - y}. The three angles of any triangle add up to 180°. Subtract the two known angles: 180 − ${x} − ${y} = ${180 - x - y}.\nCheck: ${x} + ${y} + ${180 - x - y} = 180 ✓` });
   }
   for (let i = 1; i <= 3; i++) {
     const L = ri(4, 15), W = ri(2, L - 1), P = 2 * (L + W);
     add({ id: `g-geo-rect${i}`, s: 'geo', t: 'input', q: `A rectangle has a perimeter of ${P} and a length of ${L}. What is its area?`, a: [String(L * W)],
-      e: `2(${L}) + 2w = ${P}, so w = ${W}. Area = ${L} × ${W} = ${L * W}.` });
+      e: `Answer: ${L * W}. You need the width first.\nStep 1: perimeter = 2(length) + 2(width): ${P} = 2(${L}) + 2w = ${2 * L} + 2w, so 2w = ${P - 2 * L} and w = ${W}.\nStep 2: area = length × width = ${L} × ${W} = ${L * W}.\nTrap: perimeter (distance around) and area (space inside) are different; don’t stop after finding the width.` });
   }
   for (let i = 1; i <= 2; i++) {
     const d = ri(2, 9) * 2;
     add({ id: `g-geo-circle${i}`, s: 'geo', t: 'input', q: `A circle has a diameter of ${d}. Its area is kπ. What is k?`, a: [String((d / 2) ** 2)],
-      e: `The radius is ${d / 2}, so the area is π · ${d / 2}² = ${(d / 2) ** 2}π.` });
+      e: `Answer: ${(d / 2) ** 2}. The area formula uses the radius, which is half the diameter: r = ${d} ÷ 2 = ${d / 2}.\nArea = πr² = π × ${d / 2}² = ${(d / 2) ** 2}π, so k = ${(d / 2) ** 2}.\nTrap: using the diameter (${d}) instead of the radius gives ${d * d}π, four times too big.` });
   }
 
   window.INK_QUESTIONS.push(...Q);

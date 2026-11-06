@@ -959,3 +959,11 @@ svg.mascot.petted { animation: pet .6s var(--spring); transform-origin: 50% 90%;
 .wclist { display: grid; gap: 8px; }
 .wcrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .wcrow b { font-size: 18px; }
+
+/* Full answer explanations */
+.verdict .expl { max-height: 38vh; overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; }
+.expl .eline { margin: 0 0 8px; line-height: 1.5; }
+.expl .eline:last-child { margin-bottom: 0; }
+.expl .eline b { font-weight: 800; }
+.ebody .expl { margin-top: 6px; }
+.teach-more { line-height: 1.5; }
