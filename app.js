@@ -882,9 +882,18 @@
   const otherWords = (it, n) => shuffle(ALLW.filter((x) => x.pos === it.pos && !nearW(x.w, it.w) && (!ALLOWED || ALLOWED.has(x.w)))).slice(0, n);
   const defOf = (x) => { const v = vInfo(x.w); return v ? rnd1(v.alts) : x.d; };
   const vExplain = (it) => `${capW(it.w)} means ${it.d}${it.syn.length ? ` (similar words: ${it.syn.join(', ')})` : ''}.`;
+  /* Second wording for every non-vocab question (questions-alt.js). The original shows the first time,
+     the reworded version the next, and so on. A retry in the same lesson gets the other version. */
+  function altVersion(q) {
+    let a = (window.INK_ALT || {})[q.id];
+    if (!a && q.q) for (const [re, r] of (window.INK_ALT_RULES || [])) if (re.test(q.q)) { a = { q: q.q.replace(re, r) }; break; }
+    return a;
+  }
+  const useAlt = (q) => { const r = S.q[q.id]; return (r ? r.c + r.w : 0) % 2 === 1; };
   function vary(q0) {
     const q = q0.base || q0;
     if (q.learn || q.bell) return q0;
+    if (!q.vw && !q.id.startsWith('vw-')) { const a = altVersion(q); return a && useAlt(q) ? { ...q, ...a, base: q, reworded: true } : q; }
     if (q.t === 'match' && q.id.startsWith('vw-')) return { ...q, base: q, pairs: q.pairs.map(([w, d]) => { const it = vInfo(w); return [w, it ? rnd1(it.alts) : d]; }) };
     if (!q.vw) return q0;
     const it = vInfo(q.vw); if (!it) return q0;
@@ -1194,6 +1203,7 @@
       retry ? h('span', { class: 'chip' }, 'Second try') : null,
       q.learn ? h('span', { class: 'chip', style: 'background:var(--hl);color:var(--on-hl)' }, q.t === 'guide' ? 'Strategy' : q.t === 'wordcheck' ? 'Vocabulary' : 'New word') : null,
       q.d === 3 ? h('span', { class: 'chip hardchip' }, 'Hard') : null,
+      q.reworded ? h('span', { class: 'chip' }, 'Reworded') : null,
       q.act ? h('span', { class: 'chip actchip' }, 'ACT') : null,
       qTimerOn(q) ? h('span', { class: 'qclock num', id: 'qclock', 'aria-label': 'Time for this question' }, fmtClock(paceFor(q) * 1000)) : null,
       q.bell ? h('span', { class: 'chip bellchip' }, `Bell Ringer \u00b7 was \u201c${KIND[q.origType]}\u201d`) : null,
